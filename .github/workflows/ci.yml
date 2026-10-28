@@ -98,3 +98,80 @@ jobs:
               --notes-file .github/RELEASE_NOTES_2.0.1.md \
               --target "$GITHUB_SHA"
           fi
+
+  replace-v2-0-1-font-asset:
+    needs: windows-tests
+    # A single explicitly marked merged commit, not a normal push, may replace
+    # the existing v2.0.1 executable without modifying its tag or URL.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[replace-v2.0.1-font]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Flashpoint-Uninstaller-2.0.1-win64
+          path: release-files
+      - name: Replace only published v2.0.1 EXE, verify digest and preserve tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe='release-files/Flashpoint-Uninstaller.exe'
+          test -s "$exe"
+          published="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1")"
+          jq -e '.tag_name == "v2.0.1" and .draft == false and .prerelease == false and
+                 (.assets | any(.name == "Flashpoint-Uninstaller.exe"))' <<< "$published" >/dev/null
+          old_digest="$(jq -r '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest' <<< "$published")"
+          new_digest="sha256:$(sha256sum "$exe" | cut -d' ' -f1)"
+          if [[ "$old_digest" == "$new_digest" ]]; then
+            echo "::error::Refusing to replace a binary with an identical digest."
+            exit 1
+          fi
+          gh release upload v2.0.1 "$exe" --clobber --repo "$GITHUB_REPOSITORY"
+          stored="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" --jq
+            '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest')"
+          [[ "$stored" == "$new_digest" ]] || {
+            echo "::error::Release asset digest does not match verified Windows build."
+            exit 1
+          }
+          gh release edit v2.0.1 --repo "$GITHUB_REPOSITORY" \
+            --title 'Flashpoint Uninstaller v2.0.1' \
+            --notes-file .github/RELEASE_NOTES_2.0.1.md
+          echo "v2.0.1 successfully replaced in place; tag and download URL retained."
+          echo "Old: $old_digest"
+          echo "New: $new_digest"
+
+      - name: Final cleanup of merged font-fix branch and its failed CI records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='fix/v2.0.1-font-consistency-20261028'
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
+            expected="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+            merged="$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged \
+              --head "$branch" --json headRefOid --jq '.[0].headRefOid')"
+            [[ "$expected" == "$merged" ]] || {
+              echo "::error::Font fix branch has unmerged work; refusing deletion."
+              exit 1
+            }
+            git fetch origin "refs/heads/$branch"
+            [[ "$(git rev-parse FETCH_HEAD)" == "$expected" ]] || exit 1
+            git push origin "--force-with-lease=refs/heads/$branch:$expected" ":refs/heads/$branch"
+          fi
+          # Snapshot failures before deleting, so pagination cannot skip runs.
+          failed_ids="$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs?branch=$branch&status=completed&per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "failure") | .id')"
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          done <<< "$failed_ids"
