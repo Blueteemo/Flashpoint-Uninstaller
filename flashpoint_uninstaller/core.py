@@ -307,8 +307,16 @@ def _remove_installation_locked(
             # The per-directory handle closes the validation/delete race on
             # Windows. A hostile replacement can at most affect an empty
             # directory at rmdir time, never make us rmtree a foreign tree.
-            _remove_tree_without_root_race(staging, expected=current.identity,
-                                           on_deleted=record_deletion)
+            if os.name == 'nt':
+                # Windows: open every child relative to a held parent HANDLE,
+                # reject reparse objects, and dispose via the same file handle.
+                # No path-based recursive deletion is allowed on Windows.
+                from .windows_delete import remove_tree as remove_by_handles
+                remove_by_handles(staging, expected_identity=current.identity,
+                                  on_deleted=record_deletion)
+            else:
+                _remove_tree_without_root_race(staging, expected=current.identity,
+                                               on_deleted=record_deletion)
         except Exception as exc:
             # Keep the location of any remaining data in every error message,
             # including when a different installation recreated the old path.
