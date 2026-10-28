@@ -1,17 +1,25 @@
-## Flashpoint 一键卸载 v2.0.1
+A security and reliability update to Flashpoint Uninstaller, with a bilingual Chinese/English Windows interface.
 
-本次更新重点修复 2.0.0 发布后代码审查发现的卸载安全与可靠性问题。
+### Highlights
 
-### 安全和稳定性修复
-- 强化 Windows 系统目录、关键目录及其上层路径的拦截。
-- 拒绝网络映射盘和未经确认的符号链接、联接点。
-- 加强 Flashpoint 安装身份识别，避免通用目录被误认。
-- 删除前重新确认目录身份，采取隔离暂存并在身份变化时中止。
-- 处理部分删除后的同一进程重试与多个实例同时卸载的情况。
-- 快捷方式经过再次校验后才移除，异常情况下尽量保留原文件。
-- 修复非 ASCII 快捷方式路径的 PowerShell 编码问题，以及清理失败可能导致的窗口卡死。
+- Adds Simplified Chinese and English UI text for inspection, warnings, confirmation, progress, and errors.
+- Automatically chooses the Windows UI language and provides a manual language switch.
+- Strengthens protected-path checks, installation identification, and directory identity verification.
+- Improves interrupted-removal recovery, concurrent removal handling, and shortcut safety.
+- Handles Unicode shortcut paths and related cleanup errors more reliably.
 
-### 兼容性与注意事项
-Windows 10 / 11 64 位；单文件 EXE，无需安装 Python。操作将永久删除所选 Flashpoint 安装目录，请先备份游戏数据、收藏、播放列表和存档。
+### How to use
 
-本工具独立于 Flashpoint Archive 官方。Windows 自动化测试使用合成安装目录；**不代表已在完整真实安装上进行破坏性认证**。
+Run `Flashpoint-Uninstaller.exe`, switch language if needed, inspect the selected installation directory, back up important data, and confirm permanent removal.
+
+### Compatibility and limitations
+
+- Windows 10/11 x64, standalone EXE; Python is not required.
+- Designed for conventional Flashpoint Infinity / Ultimate installation layouts.
+- The selected installation folder is permanently removed, including any downloads, playlists, favorites, and saves inside it.
+- Other saves stored outside the installation folder are not intentionally removed.
+- Windows CI covers synthetic installation tests, the EXE build, and startup. These tests do not constitute destructive certification on a complete real Flashpoint installation.
+
+### Important
+
+**Back up your data before removing an installation.** This file is prepared for the future v2.0.1 release. The update is under security review and is **not yet published**.
