@@ -110,9 +110,11 @@ jobs:
           set -euo pipefail
           # Only completed FAILED runs. Successful and in-progress runs,
           # including the release verification and this cleanup run, are retained.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=completed&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "failure") | [.id, .name, .status, .conclusion] | @tsv' |
+          # Snapshot run IDs before deletions, to avoid moving pagination.
+          failed_runs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=completed&per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "failure") | [.id, .name, .status, .conclusion] | @tsv')"
           while IFS=$'\t' read -r run_id name status conclusion; do
+            [[ -n "$run_id" ]] || continue
             if [[ "$status" != 'completed' || "$conclusion" != 'failure' ]]; then
               continue
             fi
@@ -123,4 +125,4 @@ jobs:
                 ;;
               *) echo "Preserving unrelated workflow: $name ($run_id)" ;;
             esac
-          done
+          done <<< "$failed_runs"
