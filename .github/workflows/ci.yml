@@ -1,9 +1,15 @@
 name: Windows validation & release
 on:
   push:
-    branches: [main, 'develop/**', 'fix/**']
+    branches: [main, 'develop/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_v2_0_1:
+        description: '手动确认发布经过安全复核的 v2.0.1'
+        type: boolean
+        required: true
+        default: false
 permissions:
   contents: read
 jobs:
@@ -15,6 +21,10 @@ jobs:
         with:
           python-version: '3.12'
           architecture: x64
+      - name: Refine and validate the v2.0.0 icon
+        run: |
+          python -m pip install "Pillow>=10,<13"
+          python tools/refine_icon.py
       - name: Unit and safety tests
         run: python -m unittest discover -s tests -v
       - name: Syntax check
@@ -44,9 +54,16 @@ jobs:
           name: Flashpoint-Uninstaller-2.0-win64
           path: dist/Flashpoint-Uninstaller.exe
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Flashpoint-Uninstaller-2.0-icons
+          path: |
+            assets/icon_v2.ico
+            assets/icon_v2.png
+          if-no-files-found: error
   publish-release:
     needs: windows-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_v2_0_1 == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,22 +73,23 @@ jobs:
         with:
           name: Flashpoint-Uninstaller-2.0-win64
           path: release-files
-      - name: Synchronize existing v2.0.0 release notes in Chinese
+      - uses: actions/download-artifact@v4
+        with:
+          name: Flashpoint-Uninstaller-2.0-icons
+          path: fixed-icon
+      - name: Publish reviewed v2.0.1 only after manual approval
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -s release-files/Flashpoint-Uninstaller.exe
-          if gh release view v2.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # This job only updates the already-published historical notes.
-            # It NEVER overwrites the published executable or creates a new
-            # release based solely on a push to main.
-            gh release edit v2.0.0 --repo "$GITHUB_REPOSITORY" \
-              --title 'Flashpoint 一键卸载 v2.0.0' \
-              --notes-file .github/RELEASE_NOTES_2.0.md
-            gh release view v2.0.0 --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
+          if gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v2.0.1 already exists; refusing to overwrite its existing executable.'
+            gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
           else
-            echo 'Missing v2.0.0 release. No automatic release creation.'
-            exit 1
+            gh release create v2.0.1 release-files/Flashpoint-Uninstaller.exe \
+              --repo "$GITHUB_REPOSITORY" \
+              --title 'Flashpoint 一键卸载 v2.0.1' \
+              --notes-file .github/RELEASE_NOTES_2.0.1.md \
+              --target "$GITHUB_SHA"
           fi
-

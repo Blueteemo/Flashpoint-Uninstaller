@@ -10,11 +10,11 @@
 
 ## 下载
 
-**[下载 v2.0.0（Windows 64 位）](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)**
+**[下载最新版](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/latest)**
 
 [查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **安全复核提示（2026-10-28）**：发布后的自动代码审查指出若干尚未修复的删除边界问题。建议暂缓在含重要数据的安装目录上运行 v2.0.0，等待完成安全修订与新的验证版本。
+
 
 ## 功能
 
