@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
       - name: Edit existing release titles and descriptions only
@@ -62,3 +63,32 @@ jobs:
           sync_release 'v1.0' 'Flashpoint Uninstaller v1.0' '.github/RELEASE_NOTES_1.0.md'
           sync_release 'v2.0.0' 'Flashpoint Uninstaller v2.0' '.github/RELEASE_NOTES_2.0.md'
           sync_release 'v2.0.1' 'Flashpoint Uninstaller v2.0.1' '.github/RELEASE_NOTES_2.0.1.md'
+
+      - name: Remove merged one-off notes branch after metadata verification
+        if: contains(github.event.head_commit.message, '[sync-v2.0.1-notes]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/6")"
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.merged == true and .base.ref == "main" and .merge_commit_sha == $sha' \
+            <<< "$pr" >/dev/null
+          branch='docs/consolidate-v2.0.1-release-notes-20261028'
+          open_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --head "$branch" --json number --jq 'length')"
+          [[ "$open_count" == 0 ]] || {
+            echo "::warning::A separate open PR uses this branch; preserving it."
+            exit 0
+          }
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
+            expected="$(jq -r '.head.sha' <<< "$pr")"
+            current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+            [[ "$current" == "$expected" ]] || {
+              echo "::warning::Branch changed after merge; preserving it."
+              exit 0
+            }
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+            echo "Removed fully merged one-off documentation branch."
+          fi
