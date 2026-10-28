@@ -37,7 +37,7 @@ class FontPolicyTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'win32', 'Windows UI font integration')
     def test_detected_windows_fonts_are_installed(self):
         import tkinter as tk
-        from tkinter import font as tkfont
+        from tkinter import font as tkfont, ttk
         window = tk.Tk()
         window.withdraw()
         try:
@@ -49,9 +49,16 @@ class FontPolicyTests(unittest.TestCase):
             selector = select_ui_font('zh', available, 'win32')
             text_font = tkfont.Font(root=window, family=selector, size=10)
             self.assertTrue(text_font.actual('family'))
-            chooser = tk.ttk.Combobox(window) if hasattr(tk, 'ttk') else None
-            if chooser is not None:
-                chooser.configure(font=text_font)
+            chooser = ttk.Combobox(window, values=('简体中文', 'English'),
+                                   state='readonly', font=text_font)
+            chooser.pack()
+            self.assertEqual(str(chooser.cget('font')), str(text_font))
+            # Tk has a distinct listbox inside the combobox popdown; verify
+            # the CJK font is applied to the actual dropdown, not just the field.
+            popdown = window.tk.call('ttk::combobox::PopdownWindow', str(chooser))
+            window.tk.call(f'{popdown}.f.l', 'configure', '-font', str(text_font))
+            self.assertEqual(str(window.tk.call(f'{popdown}.f.l', 'cget', '-font')),
+                             str(text_font))
         finally:
             window.destroy()
 
