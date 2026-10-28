@@ -130,7 +130,7 @@ def inspect_installation(path: os.PathLike[str] | str, *, running_from: Path | N
     launchers = [str(name) for name in LAUNCHERS if (root / name).is_file() and not _has_reparse(root / name)]
     secondary = [str(name) for name in SECONDARY if (root / name).exists() and not _has_reparse(root / name)]
     # A generic Data/Legacy folder alone is not sufficient evidence.
-    strong_markers = ('Manager/FlashpointManager.exe' in secondary
+    strong_markers = (str(Path('Manager/FlashpointManager.exe')) in secondary
                       or ('FPSoftware' in secondary and 'Data' in secondary))
     if not launchers or not strong_markers:
         raise SafetyError('无法充分确认 Flashpoint 安装身份：需要启动器和管理器，或 FPSoftware + Data。')
