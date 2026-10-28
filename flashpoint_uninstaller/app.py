@@ -272,7 +272,10 @@ def run() -> None:
 
                 busy = False
                 can_retry = False
-                if kind == 'partial_error' and active_inspection is not None:
+                # Once the core has *proven* destructive progress, a later
+                # non-destructive retry failure must not discard recovery.
+                # The core still revalidates identity and safety on each retry.
+                if (kind == 'partial_error' or retry_after_failure) and active_inspection is not None:
                     try:
                         st = active_inspection.path.stat()
                         can_retry = (st.st_dev, st.st_ino) == active_inspection.identity
