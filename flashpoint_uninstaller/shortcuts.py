@@ -36,6 +36,57 @@ def _shortcut_target(path: Path) -> str | None:
         return None
 
 
+
+def _delete_locked_shortcut(path: Path, identity: tuple[int, int], snapshot: bytes) -> None:
+    """Delete a checked file by its locked Windows handle (not by pathname)."""
+    if os.name != 'nt':
+        path.unlink()  # Portable test fixtures, not production Windows path.
+        return
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.windll.kernel32
+    kernel.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                    ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.ReadFile.argtypes = (wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
+                                ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p)
+    kernel.ReadFile.restype = wintypes.BOOL
+    kernel.SetFileInformationByHandle.argtypes = (wintypes.HANDLE, ctypes.c_int,
+                                                  ctypes.c_void_p, wintypes.DWORD)
+    kernel.SetFileInformationByHandle.restype = wintypes.BOOL
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+
+    # DELETE | FILE_READ_DATA | FILE_READ_ATTRIBUTES; share READ, not WRITE or DELETE.
+    handle = kernel.CreateFileW(str(path), 0x10081, 0x1, None, 3, 0x00200000, None)
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        raise OSError(f'无法锁定快捷方式：{path}')
+    try:
+        current = path.lstat()
+        if ((current.st_dev, current.st_ino) != identity
+                or getattr(current, 'st_file_attributes', 0) & 0x400):
+            raise RuntimeError('快捷方式身份发生变化')
+        contents = bytearray()
+        while len(contents) <= len(snapshot):
+            buf = ctypes.create_string_buffer(min(65536, len(snapshot) - len(contents) + 1))
+            read = wintypes.DWORD()
+            if not kernel.ReadFile(handle, buf, len(buf), ctypes.byref(read), None):
+                raise ctypes.WinError()
+            if not read.value:
+                break
+            contents.extend(buf.raw[:read.value])
+        if contents != snapshot:
+            raise RuntimeError('快捷方式内容发生变化')
+
+        class Disposition(ctypes.Structure):
+            _fields_ = [('DeleteFile', wintypes.BOOL)]
+        request = Disposition(True)
+        if not kernel.SetFileInformationByHandle(handle, 4, ctypes.byref(request), ctypes.sizeof(request)):
+            raise ctypes.WinError()
+    finally:
+        kernel.CloseHandle(handle)
+
+
 def cleanup_shortcuts(installation: Path) -> tuple[list[Path], list[str]]:
     """Run only AFTER the installation itself was successfully removed.
 
@@ -76,10 +127,13 @@ def cleanup_shortcuts(installation: Path) -> tuple[list[Path], list[str]]:
             moved = staged.lstat()
             if (moved.st_dev, moved.st_ino) != (original.st_dev, original.st_ino):
                 raise RuntimeError('快捷方式在检查后被替换')
+            if not staged.is_file() or staged.stat().st_size > 1048576:
+                raise RuntimeError('快捷方式大小或类型异常')
+            snapshot = staged.read_bytes()
             target_again = _shortcut_target(staged)
             if not target_again or not _inside(target_again, installation):
                 raise RuntimeError('移动后快捷方式目标发生变化')
-            staged.unlink()
+            _delete_locked_shortcut(staged, (moved.st_dev, moved.st_ino), snapshot)
             removed.append(shortcut)
         except (OSError, RuntimeError) as exc:
             # Best effort restore; never erase a file we cannot revalidate.
