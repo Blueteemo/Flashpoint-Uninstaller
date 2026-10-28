@@ -66,10 +66,14 @@ class LanguageTests(TestCase):
     def test_backend_dynamic_error_prefixes(self):
         message = '无法确认路径是否为链接，已拒绝继续：C:\\Flashpoint (denied)'
         english = translate_backend(message, 'en')
-        self.assertNotIn('无法确认', english)
-        self.assertIn('Flashpoint', english)
+        self.assertTrue(english.startswith('Could not verify the path for links; operation refused: '))
+        self.assertIn(r'C:\\Flashpoint', english)
+        self.assertIn('(denied)', english)
         message = '清理中断，剩余数据在 X；恢复原目录失败：permission denied'
-        self.assertNotIn('清理中断', translate_backend(message, 'en'))
+        translated = translate_backend(message, 'en')
+        self.assertIn('Cleanup interrupted; remaining data at X', translated)
+        self.assertIn('failed to restore original folder: permission denied', translated)
+        self.assertNotIn('清理中断', translated)
 
     def test_non_destructive_language_switch(self):
         # Translating UI text does not call the deletion implementation.
