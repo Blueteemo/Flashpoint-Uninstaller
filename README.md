@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon_v2.png" alt="Flashpoint Uninstaller 2.0 icon" width="112">
+</p>
+
 # Flashpoint Uninstaller 2.0 — development preview
 
 A standalone, lightweight Windows tool for removing a Flashpoint Archive installation when the built-in manager is unavailable or inconvenient.
