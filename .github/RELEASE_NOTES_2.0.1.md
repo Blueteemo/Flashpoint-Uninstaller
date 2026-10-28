@@ -18,7 +18,7 @@ Run `Flashpoint-Uninstaller.exe`, switch language if needed, inspect the selecte
 - Designed for conventional Flashpoint Infinity / Ultimate installation layouts.
 - The selected installation folder is permanently removed, including any downloads, playlists, favorites, and saves inside it.
 - Other saves stored outside the installation folder are not intentionally removed.
-- Windows CI covers synthetic installation tests, the EXE build, and startup. These tests do not constitute destructive certification on a complete real Flashpoint installation.
+- Validated with 60 Windows automated tests, including adversarial junction cases, Unicode paths, large directories, exclusive file locks, EXE building, and a startup smoke test. These tests do not constitute destructive certification on a complete real Flashpoint installation.
 
 ### Important
 
