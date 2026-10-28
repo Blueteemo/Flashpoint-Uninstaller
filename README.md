@@ -10,11 +10,11 @@
 
 ## 下载
 
-**[下载 v2.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+**[下载最新版](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/latest)** · [查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **安全提示（2026-10-28）**：v2.0 发布后的代码审核发现尚未解决的目录删除安全风险。建议暂缓在含重要数据的安装目录上使用，等待 [v2.0.1 安全修复](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) 完成。
+> **安全提示（2026-10-28）**：v2.0 发布后的代码审核发现尚未解决的目录删除安全风险。建议暂缓在含重要数据的安装目录上使用，建议使用经过后续安全修订的版本，并始终备份重要数据。
 
-**开发预告：** [v2.0.1 安全修订](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) 将提供简体中文 / English 双语软件界面，支持自动选择与手动切换；该版本目前尚未发布。
+**v2.0.1 更新：** 程序界面支持简体中文 / English，能够识别 Windows 语言，也可以随时手动切换。
 
 ## 主要功能
 
