@@ -1,26 +1,38 @@
-# Flashpoint 一键卸载
+# Flashpoint Uninstaller 2.0 — development preview
 
-极简 · 单文件 · 彻底干净
+A standalone, lightweight Windows tool for removing a Flashpoint Archive installation when the built-in manager is unavailable or inconvenient.
 
-![Flashpoint 一键卸载](https://raw.githubusercontent.com/Blueteemo/Flashpoint-Uninstaller/main/app.ico)  
-（双击自动提权，ONE CLICK 抹除 C:\Flashpoint，干净得像从未安装）
+> **Development version (2.0.0rc1). Not a final release.** The existing [v1.0 release](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/tag/v1.0) is preserved unchanged.
 
-### 特性一览
-- 自动申请管理员权限（UAC）  
-- ONE CLICK 删除整个 `C:\Flashpoint` 目录  
-- 自动清除桌面与开始菜单快捷方式  
-- 完美支持 4K / 高 DPI 缩放  
-- 纯绿色单 exe，无任何残留
+## What is new
 
-### 立即下载 v1.0（11.9 MB）
-[下载 Flashpoint 一键卸载工具](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v1.0/Flashpoint-Uninstaller.exe)
+- Detects installations in common locations and supports manual directory selection.
+- Requires independent Flashpoint launcher and directory markers before removal.
+- Protects volume roots, Windows/user system directories, symbolic links/junctions and the running executable's directory.
+- Displays the exact deletion target and common locations containing data worth backing up.
+- Requires both an acknowledgement checkbox and a second confirmation dialog.
+- Uses a background thread to keep the UI responsive for large installations.
+- Only removes a known `Flashpoint.lnk` shortcut if it points into the selected installation; unrelated shortcuts are left alone.
+- No registry cleaning, automatic termination of processes, or removal of data outside the selected installation directory.
 
-### 使用方法（三步）
-1. 双击运行 exe  
-2. 点「是」允许提权  
-3. 点击红色区域 → 瞬间完成
+## Important
 
-> No more manual cleanup. ONE CLICK to zero.
+**Deletion is permanent.** Your downloads, playlists, favorites, and some save data can reside inside the selected Flashpoint directory. Back up what you need first. Other game saves may live elsewhere and are outside the scope of this tool.
 
-Made with ❤ by [Blueteemo](https://github.com/Blueteemo)  
-开源地址：https://github.com/Blueteemo/Flashpoint-Uninstaller
+Flashpoint itself is portable. The [official FAQ](https://flashpointarchive.org/faq) explains that you can delete its folder or use the uninstall option in Flashpoint Manager. This independent tool is intended for situations where that workflow is inaccessible or inconvenient; it is not affiliated with the Flashpoint Archive team.
+
+## Development and validation
+
+```shell
+python -m unittest discover -s tests -v
+python launch_v2.py
+```
+
+GitHub Actions tests the safety checks on Windows and builds a 64-bit standalone preview executable with PyInstaller. The workflow validates synthetic test installations only; **it does not certify removal of every real Flashpoint variant.** Preview builds are uploaded as workflow artifacts, not published as stable Releases.
+
+## Version history
+
+- **2.0.0rc1:** in-progress redesign; new safety checks and UI.
+- **1.0:** original single-file uninstaller, preserved as released.
+
+MIT License. By Blueteemo.
