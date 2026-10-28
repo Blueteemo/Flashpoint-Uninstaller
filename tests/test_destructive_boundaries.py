@@ -70,8 +70,10 @@ class SafeDeletionTests(unittest.TestCase):
                 real_unlink(path, *args, **kwargs)
                 self.root.mkdir()
                 (self.root / 'important.txt').write_text('keep me')
-                raise PermissionError('simulated interrupted removal')
-            return real_unlink(path, *args, **kwargs)
+                # Let the first unlink complete, so retry is legitimately
+                # classified as an interruption after destructive progress.
+                return
+            raise PermissionError('simulated interrupted removal')
 
         with patch.object(Path, 'unlink', introduce_other_install):
             with self.assertRaises(PartialRemovalError) as caught:
