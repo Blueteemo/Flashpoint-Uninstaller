@@ -10,9 +10,11 @@
 
 ## 下载
 
-**[下载最新版 v2.0.0（Windows 64 位）](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)**
+**[下载 v2.0.0（Windows 64 位）](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)**
 
-[查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases) · [原版 v1.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/tag/v1.0)
+[查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+
+> **安全复核提示（2026-10-28）**：发布后的自动代码审查指出若干尚未修复的删除边界问题。建议暂缓在含重要数据的安装目录上运行 v2.0.0，等待完成安全修订与新的验证版本。
 
 ## 功能
 
@@ -21,7 +23,7 @@
 - 检查路径后列出识别依据和可能需要备份的数据，要求勾选并再次确认后才会永久删除。
 - 后台执行删除，界面保持响应；遇到权限不足或文件占用，会明确报告失败，不虚报成功。
 - 安装目录成功移除后，只清理**指向该安装位置**的已知 `Flashpoint.lnk` 快捷方式，不进行模糊匹配。
-- 不清理注册表、不关闭其他进程、不删除安装目录之外的文件。
+- 不清理注册表、不关闭其他进程、不删除安装目录之外的个人数据；仅有**确认指向所选安装目录**的已知 Flashpoint 快捷方式会作为清理例外被移除。
 
 ## 使用
 
@@ -50,9 +52,5 @@ python launch_v2.py
 
 正式 EXE 由仓库的 GitHub Actions Windows 工作流构建。项目采用 MIT License。
 
-## 历史
-
-- **v2.0.0**：重做安装识别、删除安全检查、快捷方式清理、界面与图标。
-- **[v1.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/tag/v1.0)**：2025 年发布的最初单文件卸载器，历史版本与下载链接完整保留。
 
 Made by **[Blueteemo](https://github.com/Blueteemo)**.
