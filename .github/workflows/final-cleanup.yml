@@ -54,15 +54,44 @@ jobs:
               echo "::warning::Preserving branch with open PR: $branch"
               continue
             fi
-            # The branch must have landed in main. A squash merge is
-            # identified through its merged PR, not ancestry alone.
-            merged_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" \
-              --state merged --json number --jq 'length')"
-            if [[ "$merged_count" == '0' ]] && ! git merge-base --is-ancestor "origin/$branch" origin/main; then
-              echo "::warning::Preserving branch with unmerged history: $branch"
+            # Pin the exact remote tip *before* proving it safe to delete.
+            # Neither a previously merged PR nor an old local ref proves that
+            # a later push to the same branch has already been merged.
+            expected_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+            git fetch --no-tags origin "refs/heads/$branch"
+            observed_sha="$(git rev-parse FETCH_HEAD)"
+            if [[ "$observed_sha" != "$expected_sha" ]]; then
+              echo "::warning::Branch changed while fetching; preserving $branch"
               continue
             fi
-            expected_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+
+            safe_to_delete=false
+            if git merge-base --is-ancestor "$expected_sha" origin/main; then
+              safe_to_delete=true
+            elif git diff --quiet "$expected_sha" origin/main; then
+              # A squash-merged branch can have a different commit graph but
+              # exactly the same final tree as main.
+              safe_to_delete=true
+            else
+              # For squashed PRs, insist that the CURRENT tip is precisely
+              # the PR head that was merged, and its merge commit is on main.
+              merged_shas="$(gh pr list --repo "$GITHUB_REPOSITORY" \
+                --head "$branch" --state merged --limit 100 \
+                --json headRefOid,mergeCommit |
+                jq -r --arg sha "$expected_sha" \
+                  '.[] | select(.headRefOid == $sha and .mergeCommit.oid != null) | .mergeCommit.oid')"
+              while IFS= read -r merged_sha; do
+                if [[ -n "$merged_sha" ]] &&
+                   git merge-base --is-ancestor "$merged_sha" origin/main; then
+                  safe_to_delete=true
+                  break
+                fi
+              done <<< "$merged_shas"
+            fi
+            if [[ "$safe_to_delete" != 'true' ]]; then
+              echo "::warning::Unmerged or unverified branch tip; preserving $branch at $expected_sha"
+              continue
+            fi
             # Recheck just before deletion. --force-with-lease prevents deleting
             # a branch whose tip moved after the snapshot.
             if [[ "$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" \
