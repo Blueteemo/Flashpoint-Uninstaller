@@ -8,7 +8,8 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from .core import Inspection, SafetyError, discover_installations, inspect_installation, remove_installation
+from .core import (Inspection, PartialRemovalError, SafetyError, discover_installations,
+                   inspect_installation, remove_installation)
 from .i18n import LANGUAGE_NAMES, detect_language, tr, translate_backend
 from .shortcuts import cleanup_shortcuts
 
@@ -238,6 +239,9 @@ def run() -> None:
                     current, running_from=runner,
                     on_progress=lambda value: messages.put(('progress', value)),
                     allow_partial=retry_after_failure)
+            except PartialRemovalError as exc:
+                messages.put(('partial_error', str(exc)))
+                return
             except (OSError, SafetyError) as exc:
                 messages.put(('error', str(exc)))
                 return
@@ -268,7 +272,7 @@ def run() -> None:
 
                 busy = False
                 can_retry = False
-                if kind == 'error' and active_inspection is not None:
+                if kind == 'partial_error' and active_inspection is not None:
                     try:
                         st = active_inspection.path.stat()
                         can_retry = (st.st_dev, st.st_ino) == active_inspection.identity
@@ -280,7 +284,7 @@ def run() -> None:
                 acknowledgement.set(False)
                 set_controls()
 
-                if kind == 'error':
+                if kind in ('error', 'partial_error'):
                     last_error = str(value)
                     details_kind = 'error'
                     set_status('status_retry' if can_retry else 'status_failed', ACCENT)
