@@ -1,4 +1,4 @@
-"""Fail-closed deletion regression tests for Windows and portable CI fixtures."""
+"""Fail-closed deletion tests covering the actual platform deletion backend."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +12,7 @@ from flashpoint_uninstaller.core import (
     PartialRemovalError, SafetyError, _hold_directory,
     inspect_installation, remove_installation,
 )
+from flashpoint_uninstaller import windows_delete
 
 
 class SafeDeletionTests(unittest.TestCase):
@@ -25,6 +26,22 @@ class SafeDeletionTests(unittest.TestCase):
         (self.root / 'Launcher/Flashpoint.exe').write_bytes(b'launcher')
         (self.root / 'Manager/FlashpointManager.exe').write_bytes(b'manager')
 
+    def _injected_removal(self, before_mark):
+        """Inject a failure at the real destructive boundary on either platform."""
+        if os.name == 'nt':
+            original = windows_delete._mark_for_deletion
+
+            def wrapped(kernel, handle):
+                before_mark()
+                return original(kernel, handle)
+            return patch.object(windows_delete, '_mark_for_deletion', wrapped)
+        original = Path.unlink
+
+        def wrapped(path, *args, **kwargs):
+            before_mark()
+            return original(path, *args, **kwargs)
+        return patch.object(Path, 'unlink', wrapped)
+
     def test_preflight_failure_does_not_become_partial_removal(self):
         snapshot = inspect_installation(self.root)
         (self.root / 'Manager/FlashpointManager.exe').unlink()
@@ -33,54 +50,51 @@ class SafeDeletionTests(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, PartialRemovalError)
         self.assertTrue(self.root.exists())
 
-    def test_error_before_first_unlink_is_not_partial(self):
+    def test_error_before_first_removal_is_not_partial(self):
         snapshot = inspect_installation(self.root)
-        with patch.object(Path, 'unlink', side_effect=PermissionError('blocked')):
+
+        def blocked():
+            raise PermissionError('simulated locked file')
+
+        with self._injected_removal(blocked):
             with self.assertRaises(SafetyError) as caught:
                 remove_installation(snapshot, running_from=Path(__file__))
         self.assertNotIsInstance(caught.exception, PartialRemovalError)
         self.assertTrue(self.root.exists())
 
-    def test_error_after_successful_delete_is_partial_and_restorable(self):
+    def test_error_after_one_removal_is_partial_and_restorable(self):
         snapshot = inspect_installation(self.root)
-        real_unlink = Path.unlink
-        counter = [0]
+        count = [0]
 
-        def fail_on_second(path, *args, **kwargs):
-            counter[0] += 1
-            if counter[0] == 2:
+        def blocked_on_second():
+            count[0] += 1
+            if count[0] == 2:
                 raise PermissionError('simulated file lock')
-            return real_unlink(path, *args, **kwargs)
 
-        with patch.object(Path, 'unlink', fail_on_second):
+        with self._injected_removal(blocked_on_second):
             with self.assertRaises(PartialRemovalError) as caught:
                 remove_installation(snapshot, running_from=Path(__file__))
         self.assertIn(str(self.root), str(caught.exception))
         self.assertTrue(self.root.exists())
-        self.assertGreaterEqual(counter[0], 2)
+        self.assertGreaterEqual(count[0], 2)
 
     def test_new_installation_at_old_path_does_not_hide_staging(self):
         snapshot = inspect_installation(self.root)
-        real_unlink = Path.unlink
-        changed = [False]
+        count = [0]
 
-        def introduce_other_install(path, *args, **kwargs):
-            if not changed[0]:
-                changed[0] = True
-                real_unlink(path, *args, **kwargs)
+        def create_conflict_then_interrupt():
+            count[0] += 1
+            if count[0] == 1:
                 self.root.mkdir()
                 (self.root / 'important.txt').write_text('keep me')
-                # Let the first unlink complete, so retry is legitimately
-                # classified as an interruption after destructive progress.
-                return
-            raise PermissionError('simulated interrupted removal')
+            if count[0] == 2:
+                raise PermissionError('simulated interrupted removal')
 
-        with patch.object(Path, 'unlink', introduce_other_install):
+        with self._injected_removal(create_conflict_then_interrupt):
             with self.assertRaises(PartialRemovalError) as caught:
                 remove_installation(snapshot, running_from=Path(__file__))
         self.assertEqual((self.root / 'important.txt').read_text(), 'keep me')
-        message = str(caught.exception)
-        self.assertIn('.Flashpoint-removing-', message)
+        self.assertIn('.Flashpoint-removing-', str(caught.exception))
         self.assertTrue(any(p.name.startswith('.Flashpoint-removing-')
                             for p in self.base.iterdir()))
 
