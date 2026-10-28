@@ -1,0 +1,62 @@
+name: Synchronize English release metadata
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - README.en.md
+      - .github/RELEASE_NOTES_1.0.md
+      - .github/RELEASE_NOTES_2.0.md
+      - .github/workflows/release-metadata.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flashpoint-release-metadata
+  cancel-in-progress: false
+
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Edit existing release titles and descriptions only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sync_release() {
+            local tag="$1" title="$2" notes="$3"
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+            # Read asset ID, name, size and digest for verification.
+            # No tag, release or asset creation or replacement is performed.
+            local before after
+            before="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" \
+              --jq '[.assets[] | [.id, .name, .size, .digest]] | @json')"
+            if [[ "$before" == '[]' ]]; then
+              echo "::error::Release $tag has no assets"
+              return 1
+            fi
+            gh release edit "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --notes-file "$notes"
+            after="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" \
+              --jq '[.assets[] | [.id, .name, .size, .digest]] | @json')"
+            if [[ "$before" != "$after" ]]; then
+              echo "::error::Release $tag assets changed unexpectedly"
+              return 1
+            fi
+            echo "$tag metadata synchronized; assets unchanged"
+          }
+
+          sync_release 'v1.0' 'Flashpoint Uninstaller v1.0' '.github/RELEASE_NOTES_1.0.md'
+          sync_release 'v2.0.0' 'Flashpoint Uninstaller v2.0.0' '.github/RELEASE_NOTES_2.0.md'
