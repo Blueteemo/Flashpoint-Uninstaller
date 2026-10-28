@@ -1,4 +1,4 @@
-name: Windows validation & preview build
+name: Windows validation & release
 on:
   push:
     branches: [main, 'develop/**']
@@ -19,19 +19,55 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Syntax check
         run: python -m compileall -q flashpoint_uninstaller launch_v2.py
-      - name: Build Windows 64-bit preview
+      - name: Build Windows 64-bit executable
         run: |
           python -m pip install --upgrade pip
           python -m pip install "pyinstaller>=6.10,<7"
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Flashpoint-Uninstaller-2.0-preview --icon assets/icon_v2.ico --add-data "assets/icon_v2.ico;assets" launch_v2.py
-      - name: Verify EXE artifact exists
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Flashpoint-Uninstaller --icon assets/icon_v2.ico --add-data "assets/icon_v2.ico;assets" launch_v2.py
+      - name: Verify EXE and smoke test launch
         shell: pwsh
         run: |
-          $exe = 'dist/Flashpoint-Uninstaller-2.0-preview.exe'
+          $exe = Join-Path $PWD 'dist/Flashpoint-Uninstaller.exe'
           if (!(Test-Path $exe)) { throw 'EXE is missing' }
-          Write-Host "Preview size: $((Get-Item $exe).Length) bytes"
+          if ((Get-Item $exe).Length -lt 1000000) { throw 'EXE is unexpectedly small' }
+          $proc = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 6
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "GUI process exited unexpectedly: $($proc.ExitCode)" }
+            Write-Host "Windows EXE launched successfully (PID $($proc.Id))."
+          } finally {
+            if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: Flashpoint-Uninstaller-2.0-preview-win64
-          path: dist/Flashpoint-Uninstaller-2.0-preview.exe
+          name: Flashpoint-Uninstaller-2.0-win64
+          path: dist/Flashpoint-Uninstaller.exe
           if-no-files-found: error
+  publish-release:
+    needs: windows-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Flashpoint-Uninstaller-2.0-win64
+          path: release-files
+      - name: Publish verified v2.0.0 release once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s release-files/Flashpoint-Uninstaller.exe
+          if gh release view v2.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v2.0.0 release already exists; leaving it unchanged.'
+            exit 0
+          fi
+          gh release create v2.0.0 release-files/Flashpoint-Uninstaller.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --title 'Flashpoint Uninstaller v2.0.0' \
+            --notes-file .github/RELEASE_NOTES_2.0.md \
+            --target "$GITHUB_SHA"
