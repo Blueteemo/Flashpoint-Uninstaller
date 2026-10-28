@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import uuid
 from typing import Callable
 
 
@@ -178,6 +179,7 @@ def remove_installation(
     running_from: Path | None = None,
     on_progress: Callable[[str], None] | None = None,
     remover: Callable[[Path], None] = shutil.rmtree,
+    allow_partial: bool = False,
 ) -> None:
     """Re-validate immediately before removal to avoid deleting unchecked targets.
 
@@ -186,12 +188,51 @@ def remove_installation(
     """
     if running_from is None:
         raise SafetyError('必须传入正在运行的卸载器路径，以保护目标目录。')
-    current = inspect_installation(original.path, running_from=running_from)
-    if (current.path != original.path or current.markers != original.markers
-            or current.identity != original.identity):
-        raise SafetyError('目录内容在确认后发生变化，请重新检查。')
+    if allow_partial:
+        # Only trusted snapshots from this process can resume after a failed
+        # attempt. The original filesystem object must still be present.
+        _validate_boundary(original.path, running_from=running_from)
+        st = original.path.stat()
+        if (st.st_dev, st.st_ino) != original.identity:
+            raise SafetyError('未完成卸载的目录身份已改变，拒绝重试。')
+        current = original
+    else:
+        current = inspect_installation(original.path, running_from=running_from)
+        if (current.path != original.path or current.markers != original.markers
+                or current.identity != original.identity):
+            raise SafetyError('目录内容在确认后发生变化，请重新检查。')
     if on_progress:
         on_progress('正在移除所选 Flashpoint 目录……')
-    remover(current.path)
+
+    # Production deletion first atomically moves the checked directory to a
+    # private, unpredictable sibling. Re-verify the moved filesystem object
+    # before recursively deleting: a replacement at the original path cannot
+    # silently become the deletion target.
+    if remover is shutil.rmtree:
+        staging = current.path.parent / ('.Flashpoint-removing-' + uuid.uuid4().hex)
+        if staging.exists() or staging.is_symlink():
+            raise SafetyError('无法安全创建临时删除目录。')
+        os.rename(current.path, staging)
+        try:
+            _validate_boundary(staging, running_from=running_from)
+            st = staging.stat()
+            if (st.st_dev, st.st_ino) != current.identity:
+                raise SafetyError('移动后的目标目录与确认时不符，拒绝删除。')
+            shutil.rmtree(staging)
+        except Exception:
+            # If deletion partially succeeded, return remaining files to the
+            # familiar original path so the user can inspect/retry.
+            if staging.exists() and not current.path.exists():
+                try:
+                    os.rename(staging, current.path)
+                except OSError as restore_exc:
+                    raise SafetyError(
+                        f'清理中断，剩余数据在 {staging}；恢复原目录失败：{restore_exc}'
+                    ) from restore_exc
+            raise
+    else:
+        # Tests can inject a remover; never used by the packaged UI.
+        remover(current.path)
+
     if on_progress:
         on_progress('安装目录已移除。')
