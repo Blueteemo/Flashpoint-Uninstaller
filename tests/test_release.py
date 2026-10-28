@@ -144,15 +144,12 @@ class ReleaseSafetyTests(unittest.TestCase):
         desk.mkdir()
         short = desk / 'Flashpoint.lnk'
         short.write_bytes(b'fixture')
-        real_unlink = Path.unlink
         def denied(path, *args, **kwargs):
-            if path.parent == desk and path.name.startswith('.Flashpoint-remove-'):
-                raise PermissionError('simulated blocked shortcut')
-            return real_unlink(path, *args, **kwargs)
+            raise PermissionError('simulated blocked shortcut')
         with patch('flashpoint_uninstaller.shortcuts.sys.platform', 'win32'), \
              patch('flashpoint_uninstaller.shortcuts.Path.home', return_value=self.base), \
              patch('flashpoint_uninstaller.shortcuts._shortcut_target', return_value=str(root / 'Launcher/Flashpoint.exe')), \
-             patch.object(Path, 'unlink', denied):
+             patch('flashpoint_uninstaller.shortcuts._delete_locked_shortcut', side_effect=denied):
             removed, errors = cleanup_shortcuts(root)
         self.assertEqual(removed, [])
         self.assertEqual(len(errors), 1)
