@@ -1,6 +1,8 @@
 """Conservatively remove only known Flashpoint shortcuts with verified targets."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import os
 from pathlib import Path
 import subprocess
@@ -35,6 +37,41 @@ def _shortcut_target(path: Path) -> str | None:
     except (OSError, UnicodeError, subprocess.SubprocessError):
         return None
 
+
+
+
+@contextmanager
+def _lock_shortcut_for_target_check(path: Path, identity: tuple[int, int]):
+    """Freeze the LNK's content while resolving its target through PowerShell.
+
+    The handle requests read access but deliberately shares neither WRITE nor
+    DELETE. The binary content and resolved target therefore belong to the
+    same immutable file object for the whole verification window. An entirely
+    separate delete handle subsequently verifies these exact bytes again.
+    """
+    if os.name != 'nt':
+        yield
+        return
+
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.windll.kernel32
+    kernel.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                    ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.CreateFileW(str(path), 0x81, 0x1, None, 3, 0x00200000, None)
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        raise OSError(f'无法锁定快捷方式供目标检查：{path}')
+    try:
+        st = path.lstat()
+        if ((st.st_dev, st.st_ino) != identity
+                or getattr(st, 'st_file_attributes', 0) & 0x400):
+            raise RuntimeError('快捷方式在目标检查前被替换')
+        yield
+    finally:
+        kernel.CloseHandle(handle)
 
 
 def _delete_locked_shortcut(path: Path, identity: tuple[int, int], snapshot: bytes) -> None:
@@ -129,10 +166,11 @@ def cleanup_shortcuts(installation: Path) -> tuple[list[Path], list[str]]:
                 raise RuntimeError('快捷方式在检查后被替换')
             if not staged.is_file() or staged.stat().st_size > 1048576:
                 raise RuntimeError('快捷方式大小或类型异常')
-            snapshot = staged.read_bytes()
-            target_again = _shortcut_target(staged)
-            if not target_again or not _inside(target_again, installation):
-                raise RuntimeError('移动后快捷方式目标发生变化')
+            with _lock_shortcut_for_target_check(staged, (moved.st_dev, moved.st_ino)):
+                snapshot = staged.read_bytes()
+                target_again = _shortcut_target(staged)
+                if not target_again or not _inside(target_again, installation):
+                    raise RuntimeError('移动后快捷方式目标发生变化')
             _delete_locked_shortcut(staged, (moved.st_dev, moved.st_ino), snapshot)
             removed.append(shortcut)
         except (OSError, RuntimeError) as exc:
