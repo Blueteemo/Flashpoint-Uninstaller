@@ -28,11 +28,13 @@ jobs:
             --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
           echo "Confirmed: security PR merged and v2.0.1 executable published."
 
-      - name: Delete only completed project working branches
+      - name: Delete only safely merged project working branches
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           for branch in \
             'develop/v2.0' \
             'fix/v2.0.0-visual-repack' \
@@ -49,8 +51,24 @@ jobs:
               echo "::warning::Preserving branch with open PR: $branch"
               continue
             fi
-            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
-            echo "Deleted obsolete project branch: $branch"
+            # The branch must have landed in main. A squash merge is
+            # identified through its merged PR, not ancestry alone.
+            merged_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" \
+              --state merged --json number --jq 'length')"
+            if [[ "$merged_count" == '0' ]] && ! git merge-base --is-ancestor "origin/$branch" origin/main; then
+              echo "::warning::Preserving branch with unmerged history: $branch"
+              continue
+            fi
+            expected_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+            # Recheck just before deletion. --force-with-lease prevents deleting
+            # a branch whose tip moved after the snapshot.
+            if [[ "$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" \
+                --state open --json number --jq 'length')" != '0' ]]; then
+              echo "::warning::A new PR uses $branch; preserving"
+              continue
+            fi
+            git push origin "--force-with-lease=refs/heads/$branch:$expected_sha" ":refs/heads/$branch"
+            echo "Deleted verified merged project branch: $branch"
           done
 
       - name: Delete failed CI run records, preserving successful verification
@@ -60,8 +78,8 @@ jobs:
           set -euo pipefail
           # Only completed FAILED runs. Successful and in-progress runs,
           # including the release verification and this cleanup run, are retained.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=failure&per_page=100" \
-            --jq '.workflow_runs[] | [.id, .name, .status, .conclusion] | @tsv' |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=completed&per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "failure") | [.id, .name, .status, .conclusion] | @tsv' |
           while IFS=$'\t' read -r run_id name status conclusion; do
             if [[ "$status" != 'completed' || "$conclusion" != 'failure' ]]; then
               continue
