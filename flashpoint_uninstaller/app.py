@@ -35,6 +35,7 @@ def run() -> None:
     messages: queue.Queue[tuple[str, object]] = queue.Queue()
     active_inspection: Inspection | None = None
     busy = False
+    retry_after_failure = False
 
     style = ttk.Style(root)
     style.theme_use('clam')
@@ -106,7 +107,8 @@ def run() -> None:
         delete_btn.configure(state='normal' if enabled and active_inspection and acknowledgement.get() else 'disabled')
 
     def inspect() -> None:
-        nonlocal active_inspection
+        nonlocal active_inspection, retry_after_failure
+        retry_after_failure = False
         active_inspection = None
         acknowledgement.set(False)
         try:
@@ -132,13 +134,14 @@ def run() -> None:
             inspect()
 
     def on_path_change(*_args) -> None:
-        nonlocal active_inspection
+        nonlocal active_inspection, retry_after_failure
+        retry_after_failure = False
         active_inspection = None
         acknowledgement.set(False)
         set_controls()
 
     def perform() -> None:
-        nonlocal busy
+        nonlocal busy, retry_after_failure
         current = active_inspection
         if busy or current is None or not acknowledgement.get():
             return
@@ -152,7 +155,8 @@ def run() -> None:
         def worker() -> None:
             try:
                 remove_installation(current, running_from=runner,
-                                    on_progress=lambda s: messages.put(('progress', s)))
+                                    on_progress=lambda s: messages.put(('progress', s)),
+                                    allow_partial=retry_after_failure)
             except (OSError, SafetyError) as exc:
                 messages.put(('error', str(exc)))
                 return
@@ -166,7 +170,7 @@ def run() -> None:
         threading.Thread(target=worker, daemon=True).start()
 
     def poll() -> None:
-        nonlocal active_inspection, busy
+        nonlocal active_inspection, busy, retry_after_failure
         try:
             while True:
                 kind, value = messages.get_nowait()
@@ -174,12 +178,25 @@ def run() -> None:
                     notice.config(text=str(value), fg=MUTED)
                 else:
                     busy = False
-                    active_inspection = None
+                    # Keep the identity-verified snapshot after a partial
+                    # failure; the next attempt may lack launcher markers.
+                    can_retry = False
+                    if kind == 'error' and active_inspection is not None:
+                        try:
+                            st = active_inspection.path.stat()
+                            can_retry = (st.st_dev, st.st_ino) == active_inspection.identity
+                        except OSError:
+                            pass
+                    retry_after_failure = can_retry
+                    if not can_retry:
+                        active_inspection = None
                     acknowledgement.set(False)
                     set_controls()
                     if kind == 'error':
-                        notice.config(text='移除未完成', fg=ACCENT)
-                        messagebox.showerror('操作失败', f'{value}\n\n请确认程序已关闭、权限足够。')
+                        notice.config(text='移除未完成' + ('，可再次确认并重试' if can_retry else ''), fg=ACCENT)
+                        messagebox.showerror('操作失败',
+                            f'{value}\n\n请确认程序已关闭、权限足够。'
+                            + ('\n剩余目录身份未变，可重新勾选确认后再次尝试。' if can_retry else ''))
                     elif kind == 'complete':
                         removed, errors = value
                         notice.config(text='安装目录已删除', fg='#9ED8B2')
