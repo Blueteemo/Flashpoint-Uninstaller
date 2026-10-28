@@ -71,6 +71,75 @@ def _has_reparse(path: Path) -> bool:
     return path.is_symlink() or bool(getattr(st, 'st_file_attributes', 0) & 0x400)
 
 
+
+class PartialRemovalError(SafetyError):
+    """An already-started removal left files behind; re-verification is needed."""
+
+
+@contextmanager
+def _hold_directory(path: Path):
+    """Prevent a Windows directory from being renamed while we erase its children.
+
+    Share DELETE is intentionally omitted. Deleting the (eventually empty)
+    directory itself happens only after the handle is closed; we never call a
+    path-based recursive delete on an unlocked directory root.
+    """
+    if os.name != 'nt':
+        yield
+        return
+
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.windll.kernel32
+    open_dir = kernel.CreateFileW
+    open_dir.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                         ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    open_dir.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+
+    FILE_READ_ATTRIBUTES = 0x80
+    FILE_SHARE_READ_WRITE = 0x1 | 0x2  # deliberately omit FILE_SHARE_DELETE
+    OPEN_EXISTING = 3
+    FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+    FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+    handle = open_dir(str(path), FILE_READ_ATTRIBUTES, FILE_SHARE_READ_WRITE,
+                      None, OPEN_EXISTING,
+                      FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, None)
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        raise SafetyError(f'无法锁定待删除的目录，已拒绝继续：{path}')
+    try:
+        yield
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _remove_tree_without_root_race(path: Path, expected: tuple[int, int] | None = None) -> None:
+    """Recursively remove a locked directory's CONTENTS, then its empty root.
+
+    Every directory is held without FILE_SHARE_DELETE while visiting children,
+    so another Windows process cannot swap a checked directory root for an
+    unrelated nonempty tree just before path-based recursive deletion.
+    Reparse points fail closed; only an already-empty root is ever rmdir'ed
+    after the directory handle is released.
+    """
+    with _hold_directory(path):
+        if _has_reparse(path):
+            raise SafetyError('目录包含重解析点，已停止删除。')
+        st = path.stat()
+        if expected is not None and (st.st_dev, st.st_ino) != expected:
+            raise SafetyError('暂存目录身份发生变化，已停止删除。')
+        for child in path.iterdir():
+            if _has_reparse(child):
+                raise SafetyError('目标中包含链接或联接点，已停止删除。')
+            if child.is_dir():
+                _remove_tree_without_root_race(child)
+            else:
+                child.unlink()
+    # Only an empty directory can be removed here. Never rmtree an unlocked
+    # pathname: it might have been replaced while the handle was being closed.
+    path.rmdir()
+
 def _ancestors(path: Path):
     yield path
     yield from path.parents
@@ -216,23 +285,34 @@ def _remove_installation_locked(
         if staging.exists() or staging.is_symlink():
             raise SafetyError('无法安全创建临时删除目录。')
         os.rename(current.path, staging)
+        deletion_started = False
         try:
             _validate_boundary(staging, running_from=running_from)
             st = staging.stat()
             if (st.st_dev, st.st_ino) != current.identity:
                 raise SafetyError('移动后的目标目录与确认时不符，拒绝删除。')
-            shutil.rmtree(staging)
-        except Exception:
-            # If deletion partially succeeded, return remaining files to the
-            # familiar original path so the user can inspect/retry.
+            # The per-directory handle closes the validation/delete race on
+            # Windows. A hostile replacement can at most affect an empty
+            # directory at rmdir time, never make us rmtree a foreign tree.
+            deletion_started = True
+            _remove_tree_without_root_race(staging, expected=current.identity)
+        except Exception as exc:
+            # Keep the location of any remaining data in every error message,
+            # including when a different installation recreated the old path.
+            remaining = staging
             if staging.exists() and not current.path.exists():
                 try:
                     os.rename(staging, current.path)
-                except OSError as restore_exc:
-                    raise SafetyError(
-                        f'清理中断，剩余数据在 {staging}；恢复原目录失败：{restore_exc}'
-                    ) from restore_exc
-            raise
+                    remaining = current.path
+                except OSError:
+                    pass
+            if remaining.exists():
+                detail = f'剩余文件位于 {remaining}。请勿盲目重新选择目录。'
+            else:
+                detail = '暂存目录已不存在；请检查安装数据是否已移除。'
+            if deletion_started and not isinstance(exc, SafetyError):
+                raise PartialRemovalError(f'清理未完成：{exc}。{detail}') from exc
+            raise SafetyError(f'{exc}。{detail}') from exc
     else:
         # Tests can inject a remover; never used by the packaged UI.
         remover(current.path)
