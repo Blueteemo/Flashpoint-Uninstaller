@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_v2_0_1:
-        description: '手动确认发布经过安全复核的 v2.0.1'
+        description: 'Manually approve publishing the reviewed v2.0.1'
         type: boolean
         required: true
         default: false
@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.12'
           architecture: x64
-      - name: Refine and validate the v2.0.0 icon
+      - name: Validate shared application icon for v2.0.1
         run: |
           python -m pip install "Pillow>=10,<13"
           python tools/refine_icon.py
@@ -51,12 +51,12 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: Flashpoint-Uninstaller-2.0-win64
+          name: Flashpoint-Uninstaller-2.0.1-win64
           path: dist/Flashpoint-Uninstaller.exe
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: Flashpoint-Uninstaller-2.0-icons
+          name: Flashpoint-Uninstaller-2.0.1-icons
           path: |
             assets/icon_v2.ico
             assets/icon_v2.png
@@ -71,11 +71,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Flashpoint-Uninstaller-2.0-win64
+          name: Flashpoint-Uninstaller-2.0.1-win64
           path: release-files
       - uses: actions/download-artifact@v4
         with:
-          name: Flashpoint-Uninstaller-2.0-icons
+          name: Flashpoint-Uninstaller-2.0.1-icons
           path: fixed-icon
       - name: Publish reviewed v2.0.1 only after manual approval
         env:
@@ -89,7 +89,7 @@ jobs:
           else
             gh release create v2.0.1 release-files/Flashpoint-Uninstaller.exe \
               --repo "$GITHUB_REPOSITORY" \
-              --title 'Flashpoint 一键卸载 v2.0.1' \
+              --title 'Flashpoint Uninstaller v2.0.1' \
               --notes-file .github/RELEASE_NOTES_2.0.1.md \
               --target "$GITHUB_SHA"
           fi
