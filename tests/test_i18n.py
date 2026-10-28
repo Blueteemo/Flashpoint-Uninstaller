@@ -67,7 +67,7 @@ class LanguageTests(TestCase):
         message = '无法确认路径是否为链接，已拒绝继续：C:\\Flashpoint (denied)'
         english = translate_backend(message, 'en')
         self.assertTrue(english.startswith('Could not verify the path for links; operation refused: '))
-        self.assertIn(r'C:\\Flashpoint', english)
+        self.assertIn(message.split('：', 1)[1], english)
         self.assertIn('(denied)', english)
         message = '清理中断，剩余数据在 X；恢复原目录失败：permission denied'
         translated = translate_backend(message, 'en')
