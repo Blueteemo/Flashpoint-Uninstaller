@@ -101,11 +101,13 @@ def _hold_directory(path: Path):
     # FILE_LIST_DIRECTORY is real data access. FILE_READ_ATTRIBUTES alone
     # does not enforce Windows sharing restrictions against rename.
     FILE_LIST_DIRECTORY_AND_ATTRIBUTES = 0x1 | 0x80
-    FILE_SHARE_READ_WRITE = 0x1 | 0x2  # deliberately omit FILE_SHARE_DELETE
+    # Deny both FILE_SHARE_WRITE (in-place junction conversion) and
+    # FILE_SHARE_DELETE (rename/replacement) during verified traversal.
+    FILE_SHARE_READ_ONLY = 0x1
     OPEN_EXISTING = 3
     FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
     FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
-    handle = open_dir(str(path), FILE_LIST_DIRECTORY_AND_ATTRIBUTES, FILE_SHARE_READ_WRITE,
+    handle = open_dir(str(path), FILE_LIST_DIRECTORY_AND_ATTRIBUTES, FILE_SHARE_READ_ONLY,
                       None, OPEN_EXISTING,
                       FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, None)
     if not handle or handle == ctypes.c_void_p(-1).value:
