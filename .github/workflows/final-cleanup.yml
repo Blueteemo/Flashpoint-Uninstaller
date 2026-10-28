@@ -26,10 +26,16 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/pulls/2" --jq '.merged')" = 'true'
-          gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null
-          gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" --json assets \
-            --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
-          echo "Confirmed: security PR merged and v2.0.1 executable published."
+          # A Draft Release may contain an EXE, but it is NOT published.
+          # Fail closed before any destructive branch or workflow cleanup.
+          release_state="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+            --jq '[.draft, .prerelease, .published_at, ([.assets[].name] | index("Flashpoint-Uninstaller.exe"))] | @json')"
+          jq -e '.[0] == false and .[1] == false and .[2] != null and .[2] != "" and .[3] != null' \
+            <<< "$release_state" >/dev/null || {
+              echo "::error::v2.0.1 must be a PUBLISHED non-draft, non-prerelease Release with the EXE asset."
+              exit 1
+            }
+          echo "Confirmed: security PR merged and v2.0.1 publicly published with an EXE."
 
       - name: Delete only safely merged project working branches
         env:
