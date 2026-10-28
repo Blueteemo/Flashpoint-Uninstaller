@@ -135,8 +135,8 @@ jobs:
             exit 1
           fi
           gh release upload v2.0.1 "$exe" --clobber --repo "$GITHUB_REPOSITORY"
-          stored="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" --jq
-            '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest')"
+          stored="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+            --jq '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest')"
           [[ "$stored" == "$new_digest" ]] || {
             echo "::error::Release asset digest does not match verified Windows build."
             exit 1
