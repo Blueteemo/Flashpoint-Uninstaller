@@ -114,7 +114,8 @@ def _hold_directory(path: Path):
         kernel.CloseHandle(handle)
 
 
-def _remove_tree_without_root_race(path: Path, expected: tuple[int, int] | None = None) -> None:
+def _remove_tree_without_root_race(path: Path, expected: tuple[int, int] | None = None,
+                                   on_deleted: Callable[[], None] | None = None) -> None:
     """Recursively remove a locked directory's CONTENTS, then its empty root.
 
     Every directory is held without FILE_SHARE_DELETE while visiting children,
@@ -133,12 +134,16 @@ def _remove_tree_without_root_race(path: Path, expected: tuple[int, int] | None 
             if _has_reparse(child):
                 raise SafetyError('目标中包含链接或联接点，已停止删除。')
             if child.is_dir():
-                _remove_tree_without_root_race(child)
+                _remove_tree_without_root_race(child, on_deleted=on_deleted)
             else:
                 child.unlink()
+                if on_deleted is not None:
+                    on_deleted()
     # Only an empty directory can be removed here. Never rmtree an unlocked
     # pathname: it might have been replaced while the handle was being closed.
     path.rmdir()
+    if on_deleted is not None:
+        on_deleted()
 
 def _ancestors(path: Path):
     yield path
@@ -286,6 +291,10 @@ def _remove_installation_locked(
             raise SafetyError('无法安全创建临时删除目录。')
         os.rename(current.path, staging)
         deletion_started = False
+        def record_deletion() -> None:
+            nonlocal deletion_started
+            deletion_started = True
+
         try:
             _validate_boundary(staging, running_from=running_from)
             st = staging.stat()
@@ -294,8 +303,8 @@ def _remove_installation_locked(
             # The per-directory handle closes the validation/delete race on
             # Windows. A hostile replacement can at most affect an empty
             # directory at rmdir time, never make us rmtree a foreign tree.
-            deletion_started = True
-            _remove_tree_without_root_race(staging, expected=current.identity)
+            _remove_tree_without_root_race(staging, expected=current.identity,
+                                           on_deleted=record_deletion)
         except Exception as exc:
             # Keep the location of any remaining data in every error message,
             # including when a different installation recreated the old path.
@@ -310,7 +319,7 @@ def _remove_installation_locked(
                 detail = f'剩余文件位于 {remaining}。请勿盲目重新选择目录。'
             else:
                 detail = '暂存目录已不存在；请检查安装数据是否已移除。'
-            if deletion_started and not isinstance(exc, SafetyError):
+            if deletion_started:
                 raise PartialRemovalError(f'清理未完成：{exc}。{detail}') from exc
             raise SafetyError(f'{exc}。{detail}') from exc
     else:
