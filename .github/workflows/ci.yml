@@ -101,13 +101,15 @@ jobs:
 
   replace-v2-0-1-font-asset:
     needs: windows-tests
-    # A single explicitly marked merged commit, not a normal push, may replace
-    # the existing v2.0.1 executable without modifying its tag or URL.
+    # Only the exact owner-merged PR #5 may replace the v2.0.1 asset.
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       contains(github.event.head_commit.message, '[replace-v2.0.1-font]')
     runs-on: ubuntu-latest
+    concurrency:
+      group: flashpoint-v2.0.1-font-asset-replacement
+      cancel-in-progress: false
     permissions:
       contents: write
       actions: write
@@ -118,7 +120,32 @@ jobs:
         with:
           name: Flashpoint-Uninstaller-2.0.1-win64
           path: release-files
-      - name: Replace only published v2.0.1 EXE, verify digest and preserve tag
+
+      - name: Verify explicit owner-authorized merged PR and current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_ACTOR" == "Blueteemo" ]] || {
+            echo "::error::Only the repository owner can authorize this in-place release update."
+            exit 1
+          }
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/5")"
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.merged == true and .base.ref == "main" and
+             .head.ref == "fix/v2.0.1-font-consistency-20261028" and
+             .merge_commit_sha == $sha' <<< "$pr" >/dev/null || {
+            echo "::error::The triggering commit is not the merged font-fix PR #5."
+            exit 1
+          }
+          current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$current" == "$GITHUB_SHA" ]] || {
+            echo "::error::The branch has moved since this build. Refusing stale binary replacement."
+            exit 1
+          }
+
+      - name: Stage and verify the replacement, then switch the published asset
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -126,49 +153,111 @@ jobs:
           set -euo pipefail
           exe='release-files/Flashpoint-Uninstaller.exe'
           test -s "$exe"
-          published="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1")"
-          jq -e '.tag_name == "v2.0.1" and .draft == false and .prerelease == false and
-                 (.assets | any(.name == "Flashpoint-Uninstaller.exe"))' <<< "$published" >/dev/null
-          old_digest="$(jq -r '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest' <<< "$published")"
           new_digest="sha256:$(sha256sum "$exe" | cut -d' ' -f1)"
-          if [[ "$old_digest" == "$new_digest" ]]; then
-            echo "::error::Refusing to replace a binary with an identical digest."
-            exit 1
-          fi
-          gh release upload v2.0.1 "$exe" --clobber --repo "$GITHUB_REPOSITORY"
-          stored="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
-            --jq '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest')"
-          [[ "$stored" == "$new_digest" ]] || {
-            echo "::error::Release asset digest does not match verified Windows build."
+          release="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1")"
+          jq -e '.tag_name == "v2.0.1" and .draft == false and .prerelease == false' \
+            <<< "$release" >/dev/null
+          old_id="$(jq -r '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .id' <<< "$release")"
+          old_digest="$(jq -r '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest' <<< "$release")"
+          [[ -n "$old_id" && -n "$old_digest" ]] || {
+            echo "::error::Original published v2.0.1 asset is missing."
             exit 1
           }
+          if [[ "$old_digest" != "$new_digest" ]]; then
+            # Back up AND digest-verify the public EXE before any replacement.
+            mkdir -p backup
+            gh release download v2.0.1 --repo "$GITHUB_REPOSITORY" \
+              --pattern 'Flashpoint-Uninstaller.exe' --dir backup
+            backup_digest="sha256:$(sha256sum backup/Flashpoint-Uninstaller.exe | cut -d' ' -f1)"
+            [[ "$backup_digest" == "$old_digest" ]] || {
+              echo "::error::Original binary backup failed digest verification."
+              exit 1
+            }
+
+            # Upload new bytes under a different filename, while the old public
+            # download remains intact. Verify GitHub's uploaded SHA-256 first.
+            stage="Flashpoint-Uninstaller-fontfix-${GITHUB_SHA:0:12}.stage.exe"
+            cp "$exe" "release-files/$stage"
+            existing_stage="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+              --jq ".assets[] | select(.name == \"$stage\") | .id" | head -n 1)"
+            if [[ -z "$existing_stage" ]]; then
+              gh release upload v2.0.1 "release-files/$stage" --repo "$GITHUB_REPOSITORY"
+            fi
+            staged_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+              --jq ".assets[] | select(.name == \"$stage\") | .id")"
+            staged_digest="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+              --jq ".assets[] | select(.name == \"$stage\") | .digest")"
+            [[ -n "$staged_id" && "$staged_digest" == "$new_digest" ]] || {
+              echo "::error::Staged replacement failed SHA-256 verification."
+              exit 1
+            }
+
+            # The verified staged asset is already stored on GitHub. Switching
+            # its name avoids uploading bytes in the short final switchover.
+            restore_old_if_missing() {
+              result=$?
+              trap - EXIT
+              if [[ "$result" != 0 ]]; then
+                official_digest="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+                  --jq '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest' || true)"
+                if [[ -z "$official_digest" ]]; then
+                  echo "::warning::Restoring verified original EXE after a failed asset switch."
+                  gh release upload v2.0.1 backup/Flashpoint-Uninstaller.exe \
+                    --repo "$GITHUB_REPOSITORY" || \
+                    echo "::error::Automatic rollback failed. Restore original asset from CI backup."
+                fi
+              fi
+              exit "$result"
+            }
+            trap restore_old_if_missing EXIT
+            current_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+            [[ "$current_main" == "$GITHUB_SHA" ]] || {
+              echo "::error::main changed before the asset switch."
+              exit 1
+            }
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old_id"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$staged_id" \
+              -f name='Flashpoint-Uninstaller.exe' >/dev/null
+            stored="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.1" \
+              --jq '.assets[] | select(.name == "Flashpoint-Uninstaller.exe") | .digest')"
+            [[ "$stored" == "$new_digest" ]] || {
+              echo "::error::Switched release asset did not match the tested EXE."
+              exit 1
+            }
+            trap - EXIT
+            echo "Published EXE replaced in place. Old: $old_digest / New: $new_digest"
+          else
+            echo "The current published EXE already matches this Windows build; resuming finalization."
+          fi
           gh release edit v2.0.1 --repo "$GITHUB_REPOSITORY" \
             --title 'Flashpoint Uninstaller v2.0.1' \
             --notes-file .github/RELEASE_NOTES_2.0.1.md
-          echo "v2.0.1 successfully replaced in place; tag and download URL retained."
-          echo "Old: $old_digest"
-          echo "New: $new_digest"
 
-      - name: Final cleanup of merged font-fix branch and its failed CI records
+      - name: Final cleanup of the merged font-fix branch
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           branch='fix/v2.0.1-font-consistency-20261028'
+          open_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --head "$branch" --json number --jq 'length')"
+          [[ "$open_count" == 0 ]] || {
+            echo "::warning::Preserving a branch still used by an open PR."
+            exit 0
+          }
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
             expected="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
-            merged="$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged \
-              --head "$branch" --json headRefOid --jq '.[0].headRefOid')"
-            [[ "$expected" == "$merged" ]] || {
-              echo "::error::Font fix branch has unmerged work; refusing deletion."
+            merged_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/5" --jq '.head.sha')"
+            merged_base="$(gh api "repos/$GITHUB_REPOSITORY/pulls/5" --jq '.base.ref')"
+            [[ "$expected" == "$merged_head" && "$merged_base" == main ]] || {
+              echo "::error::Font-fix branch contains unmerged changes."
               exit 1
             }
             git fetch origin "refs/heads/$branch"
             [[ "$(git rev-parse FETCH_HEAD)" == "$expected" ]] || exit 1
             git push origin "--force-with-lease=refs/heads/$branch:$expected" ":refs/heads/$branch"
           fi
-          # Snapshot failures before deleting, so pagination cannot skip runs.
           failed_ids="$(gh api --paginate \
             "repos/$GITHUB_REPOSITORY/actions/runs?branch=$branch&status=completed&per_page=100" \
             --jq '.workflow_runs[] | select(.conclusion == "failure") | .id')"
