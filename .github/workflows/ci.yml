@@ -63,7 +63,12 @@ jobs:
           if-no-files-found: error
   publish-release:
     needs: windows-tests
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_v2_0_1 == true
+    # Release requires either explicit manual approval or an intentionally
+    # marked main-branch release commit. A normal main push cannot publish.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.publish_v2_0_1 == true) ||
+       (github.event_name == 'push' && contains(github.event.head_commit.message, '[release-v2.0.1]')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
