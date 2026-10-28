@@ -32,8 +32,8 @@ class ReleaseSafetyTests(unittest.TestCase):
     def test_infinity_14_style(self):
         root = self.install()
         snapshot = inspect_installation(root)
-        self.assertIn('Launcher/Flashpoint.exe', snapshot.markers)
-        self.assertIn('Manager/FlashpointManager.exe', snapshot.markers)
+        self.assertIn(str(Path('Launcher/Flashpoint.exe')), snapshot.markers)
+        self.assertIn(str(Path('Manager/FlashpointManager.exe')), snapshot.markers)
 
     def test_ultimate_14_style_without_manager(self):
         root = self.install('Flashpoint Ultimate', manager=False, ultimate=True)
@@ -57,7 +57,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         (root / 'Data/Playlists').mkdir(parents=True)
         s = inspect_installation(root)
         self.assertIn('Flash Save Backup', s.backup_candidates)
-        self.assertIn('Data/Playlists', s.backup_candidates)
+        self.assertIn(str(Path('Data/Playlists')), s.backup_candidates)
 
     def test_delete_refuses_swapped_directory_with_same_markers(self):
         root = self.install()
