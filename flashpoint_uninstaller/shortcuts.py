@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import uuid
 
 
 def _inside(target: str, parent: Path) -> bool:
@@ -60,9 +61,32 @@ def cleanup_shortcuts(installation: Path) -> tuple[list[Path], list[str]]:
         target = _shortcut_target(shortcut)
         if not target or not _inside(target, installation):
             continue
+        # Move to an unpredictable sibling first, then verify the same
+        # filesystem object and the target again. A swapped shortcut at the
+        # original path must never be unlinked based on stale information.
+        original = shortcut.lstat()
+        if getattr(original, 'st_file_attributes', 0) & 0x400:
+            continue
+        staged = shortcut.with_name('.Flashpoint-remove-' + uuid.uuid4().hex + '.lnk')
+        if staged.exists():
+            errors.append(f'{shortcut}: 暂存路径已存在，拒绝处理')
+            continue
         try:
-            shortcut.unlink()
+            shortcut.rename(staged)
+            moved = staged.lstat()
+            if (moved.st_dev, moved.st_ino) != (original.st_dev, original.st_ino):
+                raise RuntimeError('快捷方式在检查后被替换')
+            target_again = _shortcut_target(staged)
+            if not target_again or not _inside(target_again, installation):
+                raise RuntimeError('移动后快捷方式目标发生变化')
+            staged.unlink()
             removed.append(shortcut)
-        except OSError as exc:
+        except (OSError, RuntimeError) as exc:
+            # Best effort restore; never erase a file we cannot revalidate.
+            if staged.exists() and not shortcut.exists():
+                try:
+                    staged.rename(shortcut)
+                except OSError as restore:
+                    errors.append(f'{staged}: 恢复失败：{restore}')
             errors.append(f'{shortcut}: {exc}')
     return removed, errors
