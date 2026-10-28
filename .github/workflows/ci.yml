@@ -1,7 +1,7 @@
 name: Windows validation & release
 on:
   push:
-    branches: [main, 'develop/**', 'fix/v2-postrelease-audit-20261028']
+    branches: [main, 'develop/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -75,31 +75,3 @@ jobs:
             exit 1
           fi
 
-  refresh-icon-assets:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/v2-postrelease-audit-20261028'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: fix/v2-postrelease-audit-20261028
-          persist-credentials: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Refresh PNG and ICO from the approved artwork
-        run: |
-          python -m pip install 'pillow>=11,<12'
-          python tools/refresh_icon_assets.py
-      - name: Commit corrected assets to working branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/icon_v2.png assets/icon_v2.ico
-          if git diff --cached --quiet; then
-            echo 'Icon assets already consistent.'
-          else
-            git commit -m 'assets: correct icon transparency and crop'
-            git push origin HEAD:fix/v2-postrelease-audit-20261028
-          fi

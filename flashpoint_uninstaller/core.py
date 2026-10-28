@@ -96,11 +96,12 @@ def _validate_boundary(path: Path, running_from: Path | None = None) -> None:
     target = os.path.normcase(str(path))
     for critical in _critical_roots():
         try:
-            # Refuse critical directories AND their parent directories.
-            if os.path.commonpath((target, critical)) == target:
-                raise SafetyError('拒绝删除系统 / 用户重要目录及其上层目录。')
+            common = os.path.commonpath((target, critical))
         except ValueError:
             continue  # Different drives on Windows.
+        # SafetyError subclasses ValueError, so don't raise inside the try.
+        if common == target:
+            raise SafetyError('拒绝删除系统 / 用户重要目录及其上层目录。')
     if os.name == 'nt':
         import ctypes
         # DRIVE_REMOTE includes mapped drive letters, not just UNC paths.
