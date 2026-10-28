@@ -22,4 +22,4 @@ Run `Flashpoint-Uninstaller.exe`, switch language if needed, inspect the selecte
 
 ### Important
 
-**Back up your data before removing an installation.** This file is prepared for the future v2.0.1 release. The update is under security review and is **not yet published**.
+**Back up your data before removing an installation.** This update addresses the previously reported deletion safety issues. Always verify the installation path before removing files; deletion cannot be undone.
