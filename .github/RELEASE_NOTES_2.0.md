@@ -25,4 +25,4 @@ Download and run `Flashpoint-Uninstaller.exe`. Review or select the Flashpoint i
 
 **Removal is permanent.** Back up downloads, playlists, favorites, and game saves before proceeding.
 
-**Security notice (October 28, 2026):** Post-release reviews identified unresolved path-validation and deletion-race risks in v2.0.0. Avoid using it with important data until the planned [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) has been reviewed and released.
+**Security notice (October 28, 2026):** Post-release reviews identified unresolved path-validation and deletion-race risks in v2.0. Avoid using it with important data until the planned [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) has been reviewed and released.
