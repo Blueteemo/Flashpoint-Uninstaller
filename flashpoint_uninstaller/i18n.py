@@ -55,6 +55,12 @@ STRINGS: dict[str, dict[str, str]] = {
 # Existing core logic reports Chinese diagnostic strings. Keep its safety logic
 # unchanged; translate errors only when showing them in the English interface.
 ERROR_TRANSLATIONS = {
+    "暂存目录身份发生变化，已停止删除。": "Staging folder identity changed; deletion stopped.",
+    "目录包含重解析点，已停止删除。": "Folder contains a reparse point; deletion stopped.",
+    "目标中包含链接或联接点，已停止删除。": "Target contains a symbolic link or junction; deletion stopped.",
+    "快捷方式身份发生变化": "Shortcut identity changed",
+    "快捷方式内容发生变化": "Shortcut content changed",
+    "快捷方式大小或类型异常": "Shortcut file size or type is unexpected",
     "未选择目录。": "No folder selected.",
     "目标目录不存在。": "Target folder does not exist.",
     "不支持直接删除网络共享路径，请先在本地操作。": "Network shares cannot be removed directly. Use a local installation.",
@@ -119,4 +125,12 @@ def translate_backend(message: object, language: str) -> str:
         result = result.replace("清理中断，剩余数据在 ", "Cleanup interrupted; remaining data at ")
         result = result.replace("；恢复原目录失败：", "; failed to restore original folder: ")
         result = result.replace("快捷方式清理异常：", "Shortcut cleanup error: ")
+        result = result.replace("清理未完成：", "Removal incomplete: ")
+        result = result.replace("剩余文件位于 ", "Remaining files are at ")
+        result = result.replace("。请勿盲目重新选择目录。", ". Do not select another folder blindly.")
+        result = result.replace("暂存目录已不存在；请检查安装数据是否已移除。",
+                                "Staging folder is gone; verify whether installation data was removed.")
+        result = result.replace("无法锁定待删除的目录，已拒绝继续：",
+                                "Could not lock the removal directory; operation refused: ")
+        result = result.replace("无法锁定快捷方式：", "Could not lock shortcut: ")
     return result
