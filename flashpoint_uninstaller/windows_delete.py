@@ -150,10 +150,15 @@ def _open_root(kernel, path: Path):
 def _open_child(ntdll, parent, name: str):
     if not name or name in (".", "..") or any(ch in name for ch in ("/", "\\", ":", "\x00")):
         raise UnsafeEntry("Invalid directory entry in an installation.")
+    # UNICODE_STRING.Length counts UTF-16 *bytes*, not Python code points.
+    # Non-BMP characters (e.g. emoji in game filenames) use surrogate pairs.
+    utf16_length = len(name.encode("utf-16-le"))
+    if utf16_length >= 0xfffe:
+        raise UnsafeEntry("Directory entry name exceeds Windows UNICODE_STRING limits.")
     name_buffer = ctypes.create_unicode_buffer(name)
     unicode_name = UNICODE_STRING(
-        Length=len(name) * 2,
-        MaximumLength=(len(name) + 1) * 2,
+        Length=utf16_length,
+        MaximumLength=utf16_length + 2,
         Buffer=ctypes.cast(name_buffer, wintypes.LPWSTR),
     )
     attrs = OBJECT_ATTRIBUTES(
