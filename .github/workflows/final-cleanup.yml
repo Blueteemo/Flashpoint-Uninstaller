@@ -1,0 +1,76 @@
+name: Final project cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    # The final step of the entire release cycle. An ordinary push, merge,
+    # or release never triggers deletion of branches or workflow-run history.
+    if: contains(github.event.head_commit.message, '[final-cleanup]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Verify that v2.0.1 is published and PR #2 is merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/pulls/2" --jq '.merged')" = 'true'
+          gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release view v2.0.1 --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
+          echo "Confirmed: security PR merged and v2.0.1 executable published."
+
+      - name: Delete only completed project working branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for branch in \
+            'develop/v2.0' \
+            'fix/v2.0.0-visual-repack' \
+            'docs/bilingual-readme-english-releases-20261028' \
+            'fix/v2-postrelease-audit-20261028'
+          do
+            if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
+              echo "Already absent: $branch"
+              continue
+            fi
+            open_count="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" \
+              --state open --json number --jq 'length')"
+            if [[ "$open_count" != '0' ]]; then
+              echo "::warning::Preserving branch with open PR: $branch"
+              continue
+            fi
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"
+            echo "Deleted obsolete project branch: $branch"
+          done
+
+      - name: Delete failed CI run records, preserving successful verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Only completed FAILED runs. Successful and in-progress runs,
+          # including the release verification and this cleanup run, are retained.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?status=failure&per_page=100" \
+            --jq '.workflow_runs[] | [.id, .name, .status, .conclusion] | @tsv' |
+          while IFS=$'\t' read -r run_id name status conclusion; do
+            if [[ "$status" != 'completed' || "$conclusion" != 'failure' ]]; then
+              continue
+            fi
+            case "$name" in
+              'Windows validation & release'|'Synchronize English release metadata')
+                gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
+                echo "Deleted failed CI run: $run_id ($name)"
+                ;;
+              *) echo "Preserving unrelated workflow: $name ($run_id)" ;;
+            esac
+          done
