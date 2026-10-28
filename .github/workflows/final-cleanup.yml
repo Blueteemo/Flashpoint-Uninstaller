@@ -17,6 +17,9 @@ jobs:
       contents: write
       actions: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Verify that v2.0.1 is published and PR #2 is merged
         env:
           GH_TOKEN: ${{ github.token }}
