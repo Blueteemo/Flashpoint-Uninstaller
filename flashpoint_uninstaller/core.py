@@ -5,6 +5,8 @@ No user data outside the selected directory is modified by this module.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -174,7 +176,7 @@ def discover_installations() -> list[Path]:
     return valid
 
 
-def remove_installation(
+def _remove_installation_locked(
     original: Inspection,
     *,
     running_from: Path | None = None,
@@ -237,3 +239,58 @@ def remove_installation(
 
     if on_progress:
         on_progress('安装目录已移除。')
+
+@contextmanager
+def _uninstall_mutex(path: Path):
+    """Guard a canonical installation against concurrent uninstaller instances.
+
+    On Windows this uses a non-blocking named kernel mutex. Fail closed when
+    lock acquisition is not possible; never continue in an unlocked state.
+    """
+    if os.name != 'nt':
+        yield
+        return
+
+    import ctypes
+    kernel = ctypes.windll.kernel32
+    kernel.CreateMutexW.argtypes = (ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p)
+    kernel.CreateMutexW.restype = ctypes.c_void_p
+    kernel.WaitForSingleObject.argtypes = (ctypes.c_void_p, ctypes.c_uint32)
+    kernel.WaitForSingleObject.restype = ctypes.c_uint32
+    kernel.ReleaseMutex.argtypes = (ctypes.c_void_p,)
+    kernel.CloseHandle.argtypes = (ctypes.c_void_p,)
+    canonical = os.path.normcase(os.path.abspath(str(path)))
+    digest = hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:24]
+    name = 'Local\\Flashpoint-Uninstaller-' + digest
+    handle = kernel.CreateMutexW(None, False, name)
+    if not handle:
+        raise SafetyError('无法建立互斥保护，已拒绝卸载。')
+
+    acquired = False
+    try:
+        result = kernel.WaitForSingleObject(handle, 0)
+        if result == 0x102:  # WAIT_TIMEOUT
+            raise SafetyError('此安装目录已有另一卸载任务在执行。')
+        if result not in (0, 0x80):  # WAIT_OBJECT_0, WAIT_ABANDONED
+            raise SafetyError('无法确认卸载互斥状态，已拒绝操作。')
+        acquired = True
+        yield
+    finally:
+        if acquired:
+            kernel.ReleaseMutex(handle)
+        kernel.CloseHandle(handle)
+
+
+def remove_installation(
+    original: Inspection,
+    *,
+    running_from: Path | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    remover: Callable[[Path], None] = shutil.rmtree,
+    allow_partial: bool = False,
+) -> None:
+    """Serialize uninstalls before checking, staging, and removing the target."""
+    with _uninstall_mutex(original.path):
+        _remove_installation_locked(
+            original, running_from=running_from, on_progress=on_progress,
+            remover=remover, allow_partial=allow_partial)
