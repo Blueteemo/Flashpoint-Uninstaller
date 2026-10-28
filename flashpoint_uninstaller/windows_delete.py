@@ -124,16 +124,21 @@ def _attributes(kernel, handle) -> int:
     return record.FileAttributes
 
 
-def _check_root_identity(kernel, handle, inode: int) -> None:
+def _check_root_identity(kernel, handle, expected: tuple[int, int]) -> None:
     file_id = FILE_ID_INFO()
     if not kernel.GetFileInformationByHandleEx(
             handle, 18, ctypes.byref(file_id), ctypes.sizeof(file_id)):
         raise ctypes.WinError()
+    expected_device, expected_inode = expected
     observed = int.from_bytes(bytes(file_id.FileId), "little")
-    # Python's st_ino may be represented by a legacy 64-bit file index on
-    # older Windows builds, or by the newer 128-bit file ID.
-    if not inode or inode not in (observed, observed & ((1 << 64) - 1)):
-        raise UnsafeEntry("Staging directory identity differs from the inspected installation.")
+    volume = int(file_id.VolumeSerialNumber)
+    # st_dev is the Windows volume serial number on supported CPython builds.
+    # Accept the legacy low 32 bits if the file system reports a 64-bit serial.
+    # An identical file index on a different volume is NOT the same object.
+    if (not expected_inode
+            or expected_inode not in (observed, observed & ((1 << 64) - 1))
+            or expected_device not in (volume, volume & 0xffffffff)):
+        raise UnsafeEntry("Staging directory volume/file ID does not match the inspected installation.")
 
 
 def _open_root(kernel, path: Path):
@@ -234,7 +239,7 @@ def remove_tree(
     handle = _open_root(kernel, root)
     try:
         _attributes(kernel, handle)
-        _check_root_identity(kernel, handle, expected_identity[1])
+        _check_root_identity(kernel, handle, expected_identity)
 
         def visit(directory, depth: int = 0) -> None:
             if depth > 256:
