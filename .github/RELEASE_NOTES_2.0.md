@@ -1,24 +1,28 @@
-## Flashpoint 一键卸载 v2.0.0
+A redesigned standalone Windows utility for removing Flashpoint when the built-in manager is unavailable or inconvenient.
 
-一款面向 Windows 的独立 Flashpoint 卸载工具。保留单文件、无需安装的使用方式，同时重新设计了卸载前的目录识别、确认流程与界面。
+### Highlights
 
-### 主要更新
+- Modern dark interface and custom application icon.
+- Finds common installations or allows manual directory selection.
+- Checks the launcher, installation markers, and target path before removal.
+- Displays backup reminders and requires two explicit confirmations.
+- Runs deletion in the background and reports file-lock or permission errors.
+- Attempts to remove only known shortcuts verified to target the installation.
 
-- 全新的深色界面与专属应用图标。
-- 自动寻找常见 Flashpoint 安装位置，支持手动选择目录。
-- 删除前检查启动器和安装特征，保护系统目录、磁盘根目录及部分链接路径。
-- 显示目标路径与备份提醒，要求再次确认后执行永久删除。
-- 后台删除，报告权限不足、文件占用等异常。
-- 仅清理已验证指向所选 Flashpoint 安装的快捷方式。
+### How to use
 
-### 使用与兼容性
+Download and run `Flashpoint-Uninstaller.exe`. Review or select the Flashpoint installation root, click **Inspect Directory**, back up data you want to keep, and confirm permanent removal.
 
-适用于 Windows 10 / 11 64 位系统；下载 EXE 后双击运行，无需另外安装 Python。主要面向符合标准 `Launcher/Flashpoint.exe` 布局的 Flashpoint Infinity / Ultimate。
+### Compatibility and limitations
 
-请事先备份下载内容、播放列表、收藏及存档。删除无法撤销。本工具不会自动关闭其他程序、清理注册表或删除安装目录外的个人数据（经验证的 Flashpoint 快捷方式除外）。
+- Windows 10/11 x64; standalone EXE, no Python installation required.
+- Primarily targets standard Infinity / Ultimate layouts containing `Launcher/Flashpoint.exe`.
+- No registry cleanup or automatic process termination. Data outside the selected directory is not intentionally removed, except verified Flashpoint shortcuts.
+- Windows CI validated synthetic installation cases, executable building, and a startup smoke test. **Full real Flashpoint installations were not destructively tested.**
+- Independent project; not affiliated with Flashpoint Archive.
 
-本版已通过 Windows 云端构建、启动检查和合成目录测试，但**未在完整真实的 Flashpoint 安装上进行破坏性测试**。这是独立社区工具，与 Flashpoint Archive 官方无隶属关系。
+### Important
 
-### 安全复核提示（2026 年 10 月 28 日）
+**Removal is permanent.** Back up downloads, playlists, favorites, and game saves before proceeding.
 
-发布后的 AI 代码审查报告了若干尚待修正的目录校验、重解析点和并发删除风险。**在后续安全修订完成前，建议暂缓将此版本用于包含重要数据的安装目录。** 开发与修复进度请见 GitHub 仓库。
+**Security notice (October 28, 2026):** Post-release reviews identified unresolved path-validation and deletion-race risks in v2.0. Avoid using it with important data until the planned [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) has been reviewed and released.
