@@ -66,6 +66,23 @@ class InPlaceReparseTests(unittest.TestCase):
                 # If the assertion failed, remove only the junction itself.
                 if candidate.is_junction():
                     candidate.rmdir()
+            # Positive control: confirm the request is a *valid* in-place
+            # junction conversion when the tested lock is no longer held.
+            unlocked = kernel.CreateFileW(
+                str(candidate), 0x100, 0x7, None, 3, 0x02000000 | 0x00200000, None)
+            if not unlocked or unlocked == ctypes.c_void_p(-1).value:
+                self.skipTest('Windows runner does not grant reparse modification access')
+            try:
+                returned = wintypes.DWORD(0)
+                success = kernel.DeviceIoControl(
+                    unlocked, 0x000900A4, buffer, len(blob), None, 0,
+                    ctypes.byref(returned), None)
+                if not success:
+                    self.skipTest('Windows runner rejected unlocked FSCTL_SET_REPARSE_POINT')
+            finally:
+                kernel.CloseHandle(unlocked)
+                if candidate.is_junction():
+                    candidate.rmdir()
             self.assertEqual((outside / 'keep.txt').read_text(encoding='utf8'), 'important')
 
 
