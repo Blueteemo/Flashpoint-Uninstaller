@@ -29,6 +29,11 @@ BACKUP_LOCATIONS = (
     Path('Data/Images'),
     Path('Data/Saves'),
     Path('Data/Profiles'),
+    Path('Flash Save Backup'),
+    Path('Launcher/config.json'),
+    Path('preferences.json'),
+    Path('Legacy/cgi-bin'),
+    Path('FPSoftware/fpnavigator-portable/User'),
 )
 
 
@@ -41,6 +46,7 @@ class Inspection:
     path: Path
     markers: tuple[str, ...]
     backup_candidates: tuple[str, ...]
+    identity: tuple[int, int]
 
 
 def _normalized(path: os.PathLike[str] | str) -> Path:
@@ -81,6 +87,9 @@ def _critical_roots() -> set[str]:
 def _validate_boundary(path: Path, running_from: Path | None = None) -> None:
     if not path.is_dir():
         raise SafetyError('目标目录不存在。')
+    # A network share is too easy to mistake for a removable local installation.
+    if os.name == 'nt' and str(path).startswith('\\\\'):
+        raise SafetyError('不支持直接删除网络共享路径，请先在本地操作。')
     if path == path.parent or os.path.normcase(str(path)) in _critical_roots():
         raise SafetyError('拒绝删除磁盘根目录或系统 / 用户的重要目录。')
     # The root and any parent must not be a junction or symlink.
@@ -109,7 +118,8 @@ def inspect_installation(path: os.PathLike[str] | str, *, running_from: Path | N
         if any(_has_reparse(p) for p in _ancestors(candidate) if p != root and root in p.parents):
             raise SafetyError('安装标记路径包含联接点，无法安全验证目标。')
     backups = tuple(str(name) for name in BACKUP_LOCATIONS if (root / name).exists())
-    return Inspection(root, tuple(launchers + secondary), backups)
+    st = root.stat()
+    return Inspection(root, tuple(launchers + secondary), backups, (st.st_dev, st.st_ino))
 
 
 def discover_installations() -> list[Path]:
@@ -153,7 +163,8 @@ def remove_installation(
     `remover` can be injected without modifying files.
     """
     current = inspect_installation(original.path, running_from=running_from)
-    if current.path != original.path or current.markers != original.markers:
+    if (current.path != original.path or current.markers != original.markers
+            or current.identity != original.identity):
         raise SafetyError('目录内容在确认后发生变化，请重新检查。')
     if on_progress:
         on_progress('正在移除所选 Flashpoint 目录……')
