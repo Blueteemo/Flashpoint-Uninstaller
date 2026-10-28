@@ -6,12 +6,13 @@ from pathlib import Path
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 from .core import (Inspection, PartialRemovalError, SafetyError, discover_installations,
                    inspect_installation, remove_installation)
 from .i18n import LANGUAGE_NAMES, detect_language, tr, translate_backend
 from .shortcuts import cleanup_shortcuts
+from .font_policy import select_ui_font
 
 BG = '#111720'
 PANEL = '#1B2530'
@@ -38,6 +39,12 @@ def run() -> None:
     runner = Path(sys.executable if getattr(sys, 'frozen', False) else __file__)
     messages: queue.Queue[tuple[str, object]] = queue.Queue()
     language = detect_language()
+    available_fonts = tkfont.families(root)
+    chinese_ui_font = select_ui_font('zh', available_fonts, sys.platform)
+    english_ui_font = select_ui_font('en', available_fonts, sys.platform)
+    # The selector contains Chinese even when the rest of the UI is English.
+    selector_font = tkfont.Font(root=root, family=chinese_ui_font, size=10)
+    root.option_add('*TCombobox*Listbox.font', str(selector_font))
     active_inspection: Inspection | None = None
     busy = False
     retry_after_failure = False
@@ -77,6 +84,17 @@ def run() -> None:
         values=tuple(LANGUAGE_NAMES.values()), state='readonly',
         width=12, style='FP.TCombobox')
     language_picker.pack(side='left')
+    # Tk's ttk popdown listbox is separate from the combobox's text field.
+    # Setting both avoids a mixed serif/sans fallback for 简体中文.
+    def style_language_popup() -> None:
+        try:
+            popdown = root.tk.call('ttk::combobox::PopdownWindow', str(language_picker))
+            root.tk.call(f'{popdown}.f.l', 'configure', '-font', str(selector_font))
+        except tk.TclError:
+            # Native/custom themes can supply a different popdown structure.
+            pass
+
+    style_language_popup()
 
     heading = tk.Label(frame, font=('Segoe UI', 25, 'bold'),
                        fg=TEXT, bg=BG, anchor='w')
@@ -147,6 +165,22 @@ def run() -> None:
                         + (t('shortcuts_failed', count=completed_errors) if completed_errors else ''))
 
     def render_language() -> None:
+        # Switch font families together with the text, including ttk controls.
+        family = chinese_ui_font if language == 'zh' else english_ui_font
+        style.configure('FP.TEntry', font=(family, 11))
+        style.configure('FP.TButton', font=(family, 10))
+        style.configure('Danger.TButton', font=(family, 11, 'bold'))
+        style.configure('FP.TCombobox', font=(chinese_ui_font, 10))
+        language_picker.configure(font=selector_font)
+        style_language_popup()
+        language_label.configure(font=(family, 9))
+        heading.configure(font=(family, 25, 'bold'))
+        subtitle.configure(font=(family, 11))
+        path_label.configure(font=(family, 10, 'bold'))
+        notice.configure(font=(family, 10))
+        details.configure(font=(family, 10))
+        ack.configure(font=(family, 10))
+        footer.configure(font=(family, 9))
         root.title(t('app_title'))
         language_label.configure(text=t('language'))
         heading.configure(text=t('heading'))

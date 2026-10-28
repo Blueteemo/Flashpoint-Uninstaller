@@ -23,3 +23,7 @@ Run `Flashpoint-Uninstaller.exe`, switch language if needed, inspect the selecte
 ### Important
 
 **Back up your data before removing an installation.** This update addresses the previously reported deletion safety issues. Always verify the installation path before removing files; deletion cannot be undone.
+
+### Maintenance update — October 28, 2026
+
+The v2.0.1 executable was rebuilt to make Chinese text use a consistent CJK-capable UI font, including the language dropdown and its options. The version tag and download URL are unchanged; removal and safety logic were not modified.
