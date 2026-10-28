@@ -45,7 +45,7 @@ class SafetyTests(unittest.TestCase):
         state = inspect_installation(self.target)
         (self.target / 'Manager' / 'FlashpointManager.exe').unlink()
         with self.assertRaises(SafetyError):
-            remove_installation(state, remover=lambda _: self.fail('must not delete'))
+            remove_installation(state, running_from=Path(__file__), remover=lambda _: self.fail('must not delete'))
 
     def test_empty_path_refused(self):
         with self.assertRaises(SafetyError):
@@ -55,7 +55,7 @@ class SafetyTests(unittest.TestCase):
         elsewhere = self.base / 'keep.txt'
         elsewhere.write_text('important')
         state = inspect_installation(self.target)
-        remove_installation(state)
+        remove_installation(state, running_from=Path(__file__))
         self.assertFalse(self.target.exists())
         self.assertEqual(elsewhere.read_text(), 'important')
 

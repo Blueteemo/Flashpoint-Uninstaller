@@ -10,11 +10,13 @@
 
 ## 下载
 
-**[下载 v2.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+**[下载最新版](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/latest)** · [查看所有版本](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **安全提示（2026-10-28）**：v2.0 发布后的代码审核发现尚未解决的目录删除安全风险。建议暂缓在含重要数据的安装目录上使用，等待 [v2.0.1 安全修复](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) 完成。
+> **使用提示**：请确认目标确实是 Flashpoint 安装目录并提前备份重要数据。v2.0.1 针对已发现的删除安全风险进行了修订，但仍未在完整真实安装上进行破坏性测试。
 
 ## 主要功能
+
+- 自动识别 Windows 语言，支持简体中文 / English 手动切换。
 
 - 自动寻找常见 Flashpoint 安装目录，支持手动选择位置。
 - 删除前检查启动器、安装特征和目标路径，拦截部分危险目录及链接路径。
@@ -37,7 +39,7 @@
 
 主要面向 Windows 10/11 64 位系统，以及采用标准 `Launcher/Flashpoint.exe` 结构的 Flashpoint Infinity / Ultimate。不能充分识别的历史版本或残缺安装可能被拒绝。
 
-v2.0 通过了 Windows 云端单元测试、合成目录测试、EXE 构建与启动检查；**并未在完整真实的 Flashpoint 安装上进行破坏性卸载测试，也不能视为已解决发布后的安全审核意见**。
+v2.0.1 在 Windows 云端通过 60 项安全与功能测试、合成目录删除及对抗性 junction 测试、EXE 构建与启动检查。**未在完整真实的 Flashpoint 安装上进行破坏性测试，不应将自动化测试视为绝对安全保证。**
 
 ## 从源码运行
 

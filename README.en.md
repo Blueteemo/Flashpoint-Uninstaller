@@ -10,11 +10,13 @@
 
 ## Download
 
-**[Download v2.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+**[Download latest release](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/latest)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **Safety notice (2026-10-28):** A post-release code review found unresolved directory-removal risks in v2.0. Avoid using this build on installations with important data until the [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) is complete.
+> **Before removing anything:** Verify the chosen directory is a Flashpoint installation and back up important data. v2.0.1 addresses identified deletion safety risks, but was not destructively tested against a complete real installation.
 
 ## Features
+
+- Detects the Windows UI language and offers a manual 简体中文 / English switch.
 
 - Finds common Flashpoint installation locations or lets you select a directory manually.
 - Checks launcher and installation markers and applies some protected-path and link checks.
@@ -37,7 +39,7 @@ If files are locked or access is denied, close Flashpoint and related processes.
 
 Primarily intended for Windows 10/11 x64 and Flashpoint Infinity / Ultimate installations with the standard `Launcher/Flashpoint.exe` layout. Unrecognized historical or incomplete installations may be rejected.
 
-v2.0 passed Windows CI unit tests, synthetic-directory tests, executable building, and a startup smoke test. **It was not destructively tested against a full real Flashpoint installation, and the post-release safety findings remain unresolved.**
+v2.0.1 passed 60 Windows CI functional and safety tests, including synthetic directory removal, adversarial junction cases, executable building, and startup. **It has not been destructively tested against a complete real Flashpoint installation. Automated tests do not guarantee absolute safety.**
 
 ## Run from source
 
