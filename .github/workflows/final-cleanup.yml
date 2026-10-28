@@ -150,7 +150,7 @@ jobs:
               continue
             fi
             case "$name" in
-              'Windows validation & release'|'Synchronize English release metadata')
+              'Windows validation & release'|'Synchronize English release metadata'|'Final project cleanup'|'.github/workflows/final-cleanup.yml')
                 gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$run_id"
                 echo "Deleted failed CI run: $run_id ($name)"
                 ;;
