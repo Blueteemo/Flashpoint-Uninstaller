@@ -45,14 +45,11 @@ class ShortcutRaceTests(unittest.TestCase):
         self.assertTrue(self.shortcut.exists())
 
     def test_delete_failure_restores_shortcut(self):
-        real = Path.unlink
         def failing_delete(path, *args, **kwargs):
-            if path.name.startswith(".Flashpoint-remove-"):
-                raise PermissionError("simulated locked shortcut")
-            return real(path, *args, **kwargs)
+            raise PermissionError("simulated locked shortcut")
         with self.options(), \
              patch("flashpoint_uninstaller.shortcuts._shortcut_target", return_value=self.target), \
-             patch.object(Path, "unlink", failing_delete):
+             patch("flashpoint_uninstaller.shortcuts._delete_locked_shortcut", side_effect=failing_delete):
             removed, errors = cleanup_shortcuts(self.install)
         self.assertEqual(removed, [])
         self.assertTrue(errors)
