@@ -10,9 +10,9 @@
 
 ## Download
 
-**[Download v2.0.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+**[Download v2.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **Safety notice (2026-10-28):** A post-release code review found unresolved directory-removal risks in v2.0.0. Avoid using this build on installations with important data until the [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) is complete.
+> **Safety notice (2026-10-28):** A post-release code review found unresolved directory-removal risks in v2.0. Avoid using this build on installations with important data until the [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) is complete.
 
 ## Features
 
@@ -37,7 +37,7 @@ If files are locked or access is denied, close Flashpoint and related processes.
 
 Primarily intended for Windows 10/11 x64 and Flashpoint Infinity / Ultimate installations with the standard `Launcher/Flashpoint.exe` layout. Unrecognized historical or incomplete installations may be rejected.
 
-v2.0.0 passed Windows CI unit tests, synthetic-directory tests, executable building, and a startup smoke test. **It was not destructively tested against a full real Flashpoint installation, and the post-release safety findings remain unresolved.**
+v2.0 passed Windows CI unit tests, synthetic-directory tests, executable building, and a startup smoke test. **It was not destructively tested against a full real Flashpoint installation, and the post-release safety findings remain unresolved.**
 
 ## Run from source
 
