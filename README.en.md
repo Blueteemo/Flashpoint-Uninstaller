@@ -10,11 +10,11 @@
 
 ## Download
 
-**[Download v2.0](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/download/v2.0.0/Flashpoint-Uninstaller.exe)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
+**[Download latest release](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases/latest)** · [All releases](https://github.com/Blueteemo/Flashpoint-Uninstaller/releases)
 
-> **Safety notice (2026-10-28):** A post-release code review found unresolved directory-removal risks in v2.0. Avoid using this build on installations with important data until the [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) is complete.
+> **Safety notice (2026-10-28):** A post-release code review found unresolved directory-removal risks in v2.0. Avoid using this build on installations with important data and prefer a later safety-updated release after backing up important files.
 
-**In development:** The [v2.0.1 safety update](https://github.com/Blueteemo/Flashpoint-Uninstaller/pull/2) will add a bilingual 简体中文 / English application interface with automatic language detection and a manual switch. It has not been released.
+**v2.0.1 update:** The application interface supports 简体中文 / English, with Windows language detection and an in-app switch.
 
 ## Features
 
