@@ -56,18 +56,21 @@ jobs:
         with:
           name: Flashpoint-Uninstaller-2.0-win64
           path: release-files
-      - name: Publish verified v2.0.0 release once
+      - name: Synchronize existing v2.0.0 release notes in Chinese
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -s release-files/Flashpoint-Uninstaller.exe
           if gh release view v2.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'v2.0.0 release already exists; leaving it unchanged.'
-            exit 0
+            # This job only updates the already-published historical notes.
+            # It NEVER overwrites the published executable or creates a new
+            # release based solely on a push to main.
+            gh release edit v2.0.0 --repo "$GITHUB_REPOSITORY" \
+              --title 'Flashpoint 一键卸载 v2.0.0' \
+              --notes-file .github/RELEASE_NOTES_2.0.md
+            gh release view v2.0.0 --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx 'Flashpoint-Uninstaller.exe'
+          else
+            echo 'Missing v2.0.0 release. No automatic release creation.'
+            exit 1
           fi
-          gh release create v2.0.0 release-files/Flashpoint-Uninstaller.exe \
-            --repo "$GITHUB_REPOSITORY" \
-            --title 'Flashpoint Uninstaller v2.0.0' \
-            --notes-file .github/RELEASE_NOTES_2.0.md \
-            --target "$GITHUB_SHA"

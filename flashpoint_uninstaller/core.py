@@ -62,8 +62,8 @@ def _has_reparse(path: Path) -> bool:
     """Reject symlinks and Windows junctions/reparse points in path ancestry."""
     try:
         st = path.lstat()
-    except OSError:
-        return False
+    except OSError as exc:
+        raise SafetyError(f'无法确认路径是否为链接，已拒绝继续：{path} ({exc})') from exc
     # On Windows stat_result has st_file_attributes / st_reparse_tag.
     return path.is_symlink() or bool(getattr(st, 'st_file_attributes', 0) & 0x400)
 
@@ -90,8 +90,27 @@ def _validate_boundary(path: Path, running_from: Path | None = None) -> None:
     # A network share is too easy to mistake for a removable local installation.
     if os.name == 'nt' and str(path).startswith('\\\\'):
         raise SafetyError('不支持直接删除网络共享路径，请先在本地操作。')
-    if path == path.parent or os.path.normcase(str(path)) in _critical_roots():
-        raise SafetyError('拒绝删除磁盘根目录或系统 / 用户的重要目录。')
+    if path == path.parent:
+        raise SafetyError('拒绝删除磁盘根目录。')
+    target = os.path.normcase(str(path))
+    for critical in _critical_roots():
+        try:
+            # Refuse critical directories AND their parent directories.
+            if os.path.commonpath((target, critical)) == target:
+                raise SafetyError('拒绝删除系统 / 用户重要目录及其上层目录。')
+        except ValueError:
+            continue  # Different drives on Windows.
+    if os.name == 'nt':
+        import ctypes
+        # DRIVE_REMOTE includes mapped drive letters, not just UNC paths.
+        try:
+            drive_kind = ctypes.windll.kernel32.GetDriveTypeW(str(path.anchor))
+        except (AttributeError, OSError) as exc:
+            raise SafetyError('无法确认磁盘类型，已拒绝删除。') from exc
+        if drive_kind == 4:
+            raise SafetyError('不支持从映射的网络磁盘删除 Flashpoint。')
+        if drive_kind not in (2, 3, 6):
+            raise SafetyError('无法验证当前磁盘类型，已拒绝删除。')
     # The root and any parent must not be a junction or symlink.
     if any(_has_reparse(p) for p in _ancestors(path)):
         raise SafetyError('目录路径包含符号链接或联接点，出于安全考虑不允许删除。')
@@ -110,8 +129,11 @@ def inspect_installation(path: os.PathLike[str] | str, *, running_from: Path | N
     _validate_boundary(root, running_from)
     launchers = [str(name) for name in LAUNCHERS if (root / name).is_file() and not _has_reparse(root / name)]
     secondary = [str(name) for name in SECONDARY if (root / name).exists() and not _has_reparse(root / name)]
-    if not launchers or not secondary:
-        raise SafetyError('无法确认这是 Flashpoint 安装目录：缺少启动器与独立的目录特征。')
+    # A generic Data/Legacy folder alone is not sufficient evidence.
+    strong_markers = ('Manager/FlashpointManager.exe' in secondary
+                      or ('FPSoftware' in secondary and 'Data' in secondary))
+    if not launchers or not strong_markers:
+        raise SafetyError('无法充分确认 Flashpoint 安装身份：需要启动器和管理器，或 FPSoftware + Data。')
     # Avoid removing a directory where a marker itself traverses through a junction.
     for mark in (*launchers, *secondary):
         candidate = root / mark
@@ -162,6 +184,8 @@ def remove_installation(
     The caller must obtain explicit confirmation from the user. In tests,
     `remover` can be injected without modifying files.
     """
+    if running_from is None:
+        raise SafetyError('必须传入正在运行的卸载器路径，以保护目标目录。')
     current = inspect_installation(original.path, running_from=running_from)
     if (current.path != original.path or current.markers != original.markers
             or current.identity != original.identity):

@@ -22,15 +22,16 @@ def _shortcut_target(path: Path) -> str | None:
     # Windows Script Host only resolves shortcuts; it never executes them.
     # Pass the file as an escaped PowerShell single-quoted literal, not through a shell.
     ps_path = str(path).replace("'", "''")
-    code = f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{ps_path}'); [Console]::Out.Write($s.TargetPath)"
+    code = ("[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); "
+            + f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{ps_path}'); [Console]::Out.Write($s.TargetPath)")
     try:
         proc = subprocess.run(
             ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', code],
-            check=True, capture_output=True, text=True, timeout=12,
+            check=True, capture_output=True, text=True, encoding='utf-8', errors='strict', timeout=12,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
         )
         return proc.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         return None
 
 

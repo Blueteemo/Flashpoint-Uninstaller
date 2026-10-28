@@ -156,7 +156,12 @@ def run() -> None:
             except (OSError, SafetyError) as exc:
                 messages.put(('error', str(exc)))
                 return
-            removed, errors = cleanup_shortcuts(current.path)
+            try:
+                removed, errors = cleanup_shortcuts(current.path)
+            except Exception as exc:
+                # Deletion already succeeded; an optional shortcut failure must
+                # never strand the GUI in its busy state.
+                removed, errors = [], [f'快捷方式清理异常：{exc}']
             messages.put(('complete', (removed, errors)))
         threading.Thread(target=worker, daemon=True).start()
 

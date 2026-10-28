@@ -66,7 +66,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         root.rename(moved)
         replacement = self.install()
         with self.assertRaises(SafetyError):
-            remove_installation(snapshot, remover=lambda _: self.fail('Must not delete replacement'))
+            remove_installation(snapshot, running_from=Path(__file__), remover=lambda _: self.fail('Must not delete replacement'))
         self.assertTrue((replacement / 'Launcher/Flashpoint.exe').exists())
 
     def test_delete_failure_does_not_touch_other_files(self):
@@ -77,7 +77,7 @@ class ReleaseSafetyTests(unittest.TestCase):
         def fail(_path):
             raise PermissionError('simulated access denied')
         with self.assertRaises(PermissionError):
-            remove_installation(snapshot, remover=fail)
+            remove_installation(snapshot, running_from=Path(__file__), remover=fail)
         self.assertTrue(root.exists())
         self.assertEqual(other.read_text(encoding='utf-8'), 'keep')
 
@@ -88,7 +88,7 @@ class ReleaseSafetyTests(unittest.TestCase):
             (path / 'Manager/FlashpointManager.exe').unlink()
             raise PermissionError('locked file')
         with self.assertRaises(PermissionError):
-            remove_installation(snapshot, remover=partial)
+            remove_installation(snapshot, running_from=Path(__file__), remover=partial)
         with self.assertRaises(SafetyError):
             inspect_installation(root)
 
