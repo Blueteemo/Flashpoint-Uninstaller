@@ -59,4 +59,4 @@ jobs:
           }
 
           sync_release 'v1.0' 'Flashpoint Uninstaller v1.0' '.github/RELEASE_NOTES_1.0.md'
-          sync_release 'v2.0.0' 'Flashpoint Uninstaller v2.0.0' '.github/RELEASE_NOTES_2.0.md'
+          sync_release 'v2.0.0' 'Flashpoint Uninstaller v2.0' '.github/RELEASE_NOTES_2.0.md'
